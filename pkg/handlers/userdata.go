@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
@@ -58,11 +60,13 @@ func ListUserData() error {
 		return fmt.Errorf("cloudstack API error: %w", err)
 	}
 
-	// Print header and rows from CloudStack ListUserData
-	fmt.Println("NAME\tID\tPROJECT\tACCOUNT")
+	// Print header and rows using tabwriter for aligned columns
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tID\tPROJECT\tACCOUNT")
 	for _, u := range resp.UserData {
-		fmt.Printf("%s\t%s\t%s\t%s\n", u.Name, u.Id, u.Project, u.Account)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", u.Name, u.Id, u.Project, u.Account)
 	}
+	w.Flush()
 	return nil
 }
 

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
@@ -50,11 +52,13 @@ func ListAffinityGroups() error {
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)
 	}
-	// Print header then rows
-	fmt.Println("NAME\tID")
+	// Print header then rows using tabwriter
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tID")
 	for _, a := range resp.AffinityGroups {
-		fmt.Printf("%s\t%s\n", a.Name, a.Id)
+		fmt.Fprintf(w, "%s\t%s\n", a.Name, a.Id)
 	}
+	w.Flush()
 	return nil
 }
 
