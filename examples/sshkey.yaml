@@ -1,0 +1,7 @@
+apiVersion: cloudstackctl/v1
+kind: SSHKey
+metadata:
+  name: platform-admin
+spec:
+  publicKey: |
+    ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3... user@example.com

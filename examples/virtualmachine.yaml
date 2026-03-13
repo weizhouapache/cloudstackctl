@@ -1,0 +1,28 @@
+apiVersion: cloudstackctl/v1
+kind: VirtualMachine
+metadata:
+  name: standalone-vm
+spec:
+  projectId: 987e6543-e21b-12d3-a456-426655440000
+  template: ubuntu-22.04
+  serviceOffering: medium
+  networkIds:
+    - existing-network-1-id
+  sshKeys:
+    - platform-admin
+  volumes:
+    - name: data-disk
+      diskOffering: standard-hdd
+      size: 50GB
+  affinityGroups:
+    - type: hostAntiAffinity
+      name: vm-spread
+  securityGroups:
+    - default-sec
+  parameters:
+    bootMode: SECURE
+    bootType: UEFI
+  healthChecks:
+    - type: ping
+      interval: 10s
+      timeout: 5s

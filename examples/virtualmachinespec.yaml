@@ -1,0 +1,15 @@
+apiVersion: cloudstackctl/v1
+kind: VirtualMachineSpec
+metadata:
+  name: basic-vm-spec
+spec:
+  template: ubuntu-22.04
+  serviceOffering: medium
+  networkIds:
+    - existing-network-1-id
+  sshKeys:
+    - platform-admin
+  volumes:
+    - name: data-disk
+      diskOffering: standard-hdd
+      size: 50GB

@@ -1,64 +1,111 @@
 # cloudstackctl
 
-`cloudstackctl` is a Kubernetes-style declarative orchestration tool for Apache CloudStack. It provides a way to manage virtual machines, networking, and storage via YAML, supporting **create, update, delete**, health checks, dependency graphs, and drift detection.
+Kubernetes-style declarative orchestration tool for Apache CloudStack
 
----
-
-# Features
-
-* Declarative management of Applications, Components, VirtualMachines, and other CloudStack resources
-* Reusable **VirtualMachineSpec** for consistent VM definitions
-* Health checks and dependency graph enforcement
-* Drift detection and reconciliation
-* PostgreSQL as the single source of truth
-* CLI, API server, and Controller manager architecture
-* Logs and debugging support for CLI, API server, and Controller
-
----
-
-# CloudStack Credentials
-
-CloudStack credentials can be defined using a Secret:
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cloudstack-credentials
-type: Opaque
-stringData:
-  apiKey: <YOUR_API_KEY>
-  secretKey: <YOUR_SECRET_KEY>
-  endpoint: https://<CLOUDSTACK_API_URL>
-```
+For local development configuration see [Development.md](Development.md).
 
 ---
 
 # Architecture Overview
 
-![Architecture](Architecture.png)
+* Single `cloudstackctl` binary provides the CLI and controller runtime.
+* Controller sends async requests to CloudStack API, writes desired & observed state, manages health checks and dependency graph. It exposes a small health endpoint on port `65426` (`/health`).
+* CLI operates locally and uses the CloudStack client to perform direct actions when appropriate; credentials are loaded from a config file (see `-c`) or environment variables (`.env.cloudstack` is used by default if present).
 
-* API server validates requests and returns immediate acknowledgment
-* Controller sends async requests to CloudStack API, writes observed state, manages health checks and dependency graph
-* CLI polls API server for near real-time status
+There are two supported mode:
+
+- **Standalone mode (`-s` / `--standalone`):** CLI-only mode that talks directly to CloudStack APIs and does not read or write the database. Use this for quick ad-hoc operations without running the controller. Cluster mode requires running the controller and Postgres (see Development.md).
+
+- **Cluster mode (default):** `cloudstackctl` operates with a PostgreSQL backing store and a controller process that reconciles desired state with CloudStack. Resources are managed via the database/controller.
+
+## Standalone mode
+
+<img src="Architecture-standalone.png" width="50%" alt="Architecture of Standalone mode" />
+
+## Cluster mode
+
+<img src="Architecture.png" width="50%" alt="Architecture of Cluster mode" />
+
 
 ---
 
-# Supported Resource Types, Actions, and Kubernetes Equivalents
+## Two Modes With YAML Support
 
-| Kind                   | Description                             | Actions Supported                                                                                         | Kubernetes Equivalent                    |
-| ---------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| **Application**        | Full application or service stack       | create, update, delete, get, describe                                                                     | Namespace / Application CRD              |
-| **Component**          | Set of VMs for a specific role          | create, update, delete, get, describe, scale                                                              | Deployment / StatefulSet                 |
-| **VirtualMachine**     | Individual VM instance                  | create, update, delete, get, describe                                                                     | Pod                                      |
-| **VirtualMachineSpec** | Reusable VM template for Components     | create, update, delete, get, describe                                                                     | PodTemplateSpec                          |
-| **Network**            | CloudStack network                      | create, update, delete, get, describe (mostly references existing networks; future: declarative creation) | NetworkPolicy / Service                  |
-| **Volume**             | Disk attached to VMs                    | create, update, delete, get, describe                                                                     | PersistentVolume / PersistentVolumeClaim |
-| **SSHKey**             | Key pair for VM access                  | create, update, delete, get, describe                                                                     | Secret                                   |
-| **UserDataRef**        | User data scripts for VM initialization | create, update, delete, get, describe                                                                     | ConfigMap / Secret                       |
-| **AffinityGroup**      | Host/VM affinity or anti-affinity       | create, update, delete, get, describe                                                                     | PodAffinity / PodAntiAffinity            |
-| **SecurityGroup**      | Firewall rules for VMs                  | create, update, delete, get, describe                                                                     | NetworkPolicy                            |
+| Feature | Standalone Mode | Cluster Mode |
+|---|---|---|
+| Purpose | Direct CloudStack resource management using YAML | Declarative orchestration with controller and DB |
+| Architecture | CLI → CloudStack API | CLI → API Server → PostgreSQL → Controller → CloudStack API |
+| Controller | No | Yes |
+| Database | No | Yes (PostgreSQL stores desired state) |
+| Execution | CLI parses YAML and performs API calls immediately | CLI posts to API server; controller reconciles desired state |
+| Typical YAML kinds | VirtualMachine, Network, Volume, SecurityGroup, AffinityGroup, SSHKey, UserData | Application, Component, VirtualMachineSpec, VirtualMachine, Network, Volume, SecurityGroup, AffinityGroup, SSHKey, UserData |
 
+### Resource Support Matrix
+
+| Resource | Standalone Mode | Cluster Mode |
+|---|:---:|:---:|
+| VirtualMachine | ✅ | ✅ |
+| Network | ✅ | ✅ |
+| Volume | ✅ | ✅ |
+| SecurityGroup | ✅ | ✅ |
+| AffinityGroup | ✅ | ✅ |
+| SSHKey | ✅ | ✅ |
+| UserData | ✅ | ✅ |
+| Application | ❌ | ✅ |
+| Component | ❌ | ✅ |
+| VirtualMachineSpec | ❌ | ✅ |
+
+
+
+# Supported Resource Types and Actions
+
+| Kind                   | Shortnames                               | Description                             | Actions Supported                                                                                         | Kubernetes Equivalent                    |
+| ---------------------- | ---------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| **Application**        | app, apps                                | Full application or service stack       | create, update, delete, get, describe                                                                     | Namespace / Application CRD              |
+| **Component**          | comp, comps                              | Set of VMs for a specific role          | create, update, delete, get, describe, scale                                                              | Deployment / StatefulSet                 |
+| **VirtualMachine**     | vm, vms                                  | Individual VM instance                  | create, update, delete, get, describe                                                                     | Pod                                      |
+| **VirtualMachineSpec** | vmspec, vmspecs                          | VM specifications for Components        | create, update, delete, get, describe                                                                     | PodTemplateSpec                          |
+| **Network**            | net, nets, network, networks             | CloudStack network                      | create, update, delete, get, describe                                                                     | NetworkPolicy / Service                  |
+| **Volume**             | vol, vols, volume, volumes               | Disk attached to VMs                    | create, update, delete, get, describe                                                                     | PersistentVolume / PersistentVolumeClaim |
+| **SSHKey**             | key, keys, sshkey, sshkeys               | Key pair for VM access                  | create, update, delete, get, describe                                                                     | Secret                                   |
+| **UserData**           | userdata, ud, uds                        | User data scripts for VM initialization | create, update, delete, get, describe                                                                     | ConfigMap / Secret                       |
+| **AffinityGroup**      | ag, affinitygroup, affinitygroups        | Host/VM affinity or anti-affinity       | create, update, delete, get, describe                                                                     | PodAffinity / PodAntiAffinity            |
+| **SecurityGroup**      | sg, sgs, securitygroup, securitygroups   | Firewall rules for VMs                  | create, update, delete, get, describe                                                                     | NetworkPolicy                            |
+
+---
+
+## Resource Field Reference
+
+Quick reference for the key fields users will commonly set for higher-level resources.
+
+**Application**
+
+| Field | Type | Description |
+|---|---|---|
+| `metadata.name` | string | Application name |
+| `spec.projectId` | string | CloudStack project UUID |
+| `spec.components` | list | Ordered list of component references (name, vmspec, replicas) |
+
+**Component**
+
+| Field | Type | Description |
+|---|---|---|
+| `metadata.name` | string | Component name (used to derive VM names) |
+| `spec.virtualMachineSpec` | string | Name of reusable `VirtualMachineSpec` to use |
+| `spec.replicas` | int | Number of VM replicas to create |
+| `spec.overrides.userDataRefs` | list | Optional: references to `UserData` to apply to this component's VMs |
+| `spec.overrides.sshKeys` | list | Optional additional SSH keys to merge into the VM spec |
+
+**VirtualMachineSpec**
+
+| Field | Type | Description |
+|---|---|---|
+| `metadata.name` | string | Reusable VM spec identifier |
+| `spec.template` | string | Template name or ID |
+| `spec.serviceOffering` | string | Service offering (size) |
+| `spec.networkIds` | list | Network IDs to attach |
+| `spec.sshKeys` | list | SSH key names to inject |
+| `spec.userDataRefs` | list | Optional references to `UserData` resources |
 ---
 
 # YAML Examples
@@ -102,6 +149,24 @@ spec:
           timeout: 5s
 ```
 
+### Application with Multiple Components
+
+```yaml
+apiVersion: cloudstackctl/v1
+kind: Application
+metadata:
+  name: simple-app
+spec:
+  projectId: 987e6543-e21b-12d3-a456-426655440000
+  components:
+    - name: frontend
+      virtualMachineSpec: basic-vm-spec
+      replicas: 2
+    - name: backend
+      virtualMachineSpec: basic-vm-spec
+      replicas: 1
+```
+
 ### Standalone VirtualMachine
 
 ```yaml
@@ -129,11 +194,12 @@ spec:
   parameters:
     bootMode: SECURE
     bootType: UEFI
-  healthChecks:
-    - type: ping
-      interval: 10s
-      timeout: 5s
 ```
+
+Usage notes:
+
+- To run the CLI in standalone mode (no DB/controller): `./cloudstackctl -s get VirtualMachine` or `./cloudstackctl -s apply -f vm.yaml`.
+- To run in cluster mode (default), ensure the controller and Postgres are running; `apply` will send resources to the controller which persists them to the DB and reconciles via CloudStack.
 
 ---
 
@@ -142,7 +208,6 @@ spec:
 | Component  | Logs / Errors                                                   | Access                                                                     |
 | ---------- | --------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | CLI        | Command output, validation, API responses                       | Console (`--verbose` or `--debug`)                                         |
-| API Server | Validation, forwarding, errors                                  | `kubectl logs <api-server-pod>` or `/var/log/cloudstackctl-api.log`        |
 | Controller | Reconciliation, CloudStack API, health checks, dependency graph | `kubectl logs <controller-pod>` or `/var/log/cloudstackctl-controller.log` |
 | PostgreSQL | Connection or transaction errors                                | Standard PostgreSQL logs                                                   |
 
@@ -160,11 +225,28 @@ spec:
 * Stores desired and observed state
 * ACID transactions, JSONB support for YAML specs
 
+Configuration: the server reads the DB connection from `DATABASE_DSN` if set,
+or assembles one from `PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, `PGPORT`,
+and `PGSSLMODE`. Example env vars:
+
+```bash
+# preferred: provide a single DSN
+export DATABASE_DSN="host=localhost user=postgres password=secret dbname=cloudstackctl port=5432 sslmode=disable"
+
+# or set individual PG* variables
+export PGHOST=localhost
+export PGUSER=postgres
+export PGPASSWORD=secret
+export PGDATABASE=cloudstackctl
+export PGPORT=5432
+export PGSSLMODE=disable
+```
+
 ---
 
 # Deployment
 
-* **Local:** `kind` cluster for CLI, API server, controller, PostgreSQL containers
+* **Local:** See [Local development](Development.md) for setup (uses `kind` cluster for controller and PostgreSQL in examples)
 * **Production:** Kubernetes or VM cluster, CloudStack manages actual VM provisioning
 
 ---

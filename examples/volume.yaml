@@ -1,0 +1,9 @@
+apiVersion: cloudstackctl/v1
+kind: Volume
+metadata:
+  name: data-disk
+spec:
+  name: data-disk
+  diskOffering: standard-hdd
+  size: 50GB
+  projectId: 987e6543-e21b-12d3-a456-426655440000

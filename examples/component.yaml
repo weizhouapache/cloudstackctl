@@ -1,0 +1,21 @@
+apiVersion: cloudstackctl/v1
+kind: Component
+metadata:
+  name: frontend
+spec:
+  replicas: 2
+  virtualMachineSpec:
+    template: ubuntu-22.04
+    serviceOffering: medium
+    networkIds:
+      - existing-network-1-id
+    sshKeys:
+      - platform-admin
+    volumes:
+      - name: data-disk
+        diskOffering: standard-hdd
+        size: 50GB
+  healthChecks:
+    - type: ping
+      interval: 10s
+      timeout: 5s

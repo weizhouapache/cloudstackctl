@@ -1,0 +1,11 @@
+apiVersion: cloudstackctl/v1
+kind: SecurityGroup
+metadata:
+  name: default-sec
+spec:
+  rules:
+    - protocol: tcp
+      portRange: 22
+      cidr: 0.0.0.0/0
+    - protocol: icmp
+      cidr: 0.0.0.0/0

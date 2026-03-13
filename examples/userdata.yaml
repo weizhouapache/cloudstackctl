@@ -1,0 +1,9 @@
+apiVersion: cloudstackctl/v1
+kind: UserData
+metadata:
+  name: init-script
+spec:
+  script: |
+    #!/bin/bash
+    echo "Hello from cloudstackctl" > /var/log/cloudstackctl-init.log
+    apt-get update && apt-get install -y htop

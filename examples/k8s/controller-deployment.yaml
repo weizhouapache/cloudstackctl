@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudstackctl-controller
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudstackctl-controller
+  template:
+    metadata:
+      labels:
+        app: cloudstackctl-controller
+    spec:
+      containers:
+        - name: controller
+          image: cloudstackctl:local
+          args: ["controller"]
+          env:
+            - name: DATABASE_DSN
+              value: "host=postgres user=postgres password=secret dbname=cloudstackctl port=5432 sslmode=disable"
+            - name: CLOUDSTACK_SECRET_NAME
+              value: "cloudstack-credentials"
+            - name: CLOUDSTACK_SECRET_NAMESPACE
+              value: "default"
+            envFrom:
+            - secretRef:
+              name: cloudstack-secret
+            - secretRef:
+              name: database-secret

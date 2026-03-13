@@ -1,0 +1,8 @@
+apiVersion: cloudstackctl/v1
+kind: AffinityGroup
+metadata:
+  name: vm-spread
+spec:
+  type: hostAntiAffinity
+  name: vm-spread
+  description: Spread VMs across hosts
