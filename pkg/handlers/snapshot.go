@@ -11,12 +11,15 @@ import (
 )
 
 // ListSnapshots prints a table of snapshots.
-func ListSnapshots() error {
+func ListSnapshots(name string) error {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Snapshot.NewListSnapshotsParams()
+	if name != "" {
+		params.SetName(name)
+	}
 	resp, err := client.Snapshot.ListSnapshots(params)
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)

@@ -4,6 +4,7 @@ import (
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/db"
 	"cloudstackctl/pkg/handlers"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -20,53 +21,62 @@ var getCmd = &cobra.Command{
 	Long:  `List resources managed by cloudstackctl (Application/Component/VirtualMachine/Network/Volume/etc.)`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
-			log.Fatal("Please specify a resource type (Application/Component/VirtualMachine/Network/Volume/SSHKey/SecurityGroup/AffinityGroup/UserData)")
+			log.Fatal("Please specify a resource type (Application/Component/VirtualMachine/Network/Volume/SSHKey/SecurityGroup/AffinityGroup/UserData) and optional name")
 		}
 
 		resourceType := normalizeResourceType(args[0])
+		name := ""
+		if len(args) > 1 {
+			name = args[1]
+		}
+
 		switch resourceType {
 		case "Application":
-			listApplications()
+			listApplications(name)
 		case "Component":
-			listComponents()
+			listComponents(name)
+		case "VirtualMachineSpec":
+			listVirtualMachineSpec(name)
 		case "VirtualMachine":
-			listVMs()
+			if err := handlers.ListVMs(name); err != nil {
+				log.Fatalf("Failed to list/describe VMs: %v", err)
+			}
+			return
 		case "Template":
-			if err := handlers.ListTemplates(); err != nil {
-				log.Fatalf("Failed to list templates: %v", err)
+			if err := handlers.ListTemplates(name); err != nil {
+				log.Fatalf("Failed to list/describe templates: %v", err)
 			}
 			return
 		case "Volume":
-			if err := handlers.ListVolumes(); err != nil {
-				log.Fatalf("Failed to list volumes: %v", err)
+			if err := handlers.ListVolumes(name); err != nil {
+				log.Fatalf("Failed to list/describe volumes: %v", err)
 			}
 			return
 		case "SSHKey":
-			if err := handlers.ListSSHKeys(); err != nil {
-				log.Fatalf("Failed to list ssh keys: %v", err)
+			if err := handlers.ListSSHKeys(name); err != nil {
+				log.Fatalf("Failed to list/describe ssh keys: %v", err)
 			}
 			return
 		case "UserData":
-			if err := handlers.ListUserData(); err != nil {
-				log.Fatalf("Failed to list userdata: %v", err)
+			if err := handlers.ListUserData(name); err != nil {
+				log.Fatalf("Failed to list/describe userdata: %v", err)
 			}
 			return
 		case "AffinityGroup":
-			if err := handlers.ListAffinityGroups(); err != nil {
-				log.Fatalf("Failed to list affinity groups: %v", err)
+			if err := handlers.ListAffinityGroups(name); err != nil {
+				log.Fatalf("Failed to list/describe affinity groups: %v", err)
 			}
 			return
 		case "SecurityGroup":
-			if err := handlers.ListSecurityGroups(); err != nil {
-				log.Fatalf("Failed to list security groups: %v", err)
+			if err := handlers.ListSecurityGroups(name); err != nil {
+				log.Fatalf("Failed to list/describe security groups: %v", err)
 			}
 			return
-		case "VirtualMachineSpec":
-			log.Fatalf("'VirtualMachineSpec' listing is not implemented")
 		case "Network":
-			if err := handlers.ListNetworks(); err != nil {
-				log.Fatalf("Failed to list networks: %v", err)
+			if err := handlers.ListNetworks(name); err != nil {
+				log.Fatalf("Failed to list/describe networks: %v", err)
 			}
+			return
 		default:
 			log.Fatalf("Unsupported resource type: %s", args[0])
 		}
@@ -103,8 +113,8 @@ func normalizeResourceType(s string) string {
 }
 
 // listNetworks lists Network resources (delegates to handlers)
-func listNetworks() {
-	if err := handlers.ListNetworks(); err != nil {
+func listNetworks(name string) {
+	if err := handlers.ListNetworks(name); err != nil {
 		log.Fatalf("Failed to list networks: %v", err)
 	}
 }
@@ -114,7 +124,8 @@ func init() {
 }
 
 // listApplications lists all Application resources
-func listApplications() {
+func listApplications(name string) {
+	// Do not use DB in standalone mode
 	// Do not use DB in standalone mode
 	if standalone {
 		log.Fatalf("'Application' is not supported in standalone mode")
@@ -126,6 +137,16 @@ func listApplications() {
 			log.Printf("Database unavailable: %v", err)
 			return
 		}
+	}
+
+	if name != "" {
+		var app v1.Application
+		if err := db.DB.Where("metadata_name = ?", name).First(&app).Error; err != nil {
+			log.Fatalf("Application %s not found: %v", name, err)
+		}
+		b, _ := json.MarshalIndent(app, "", "  ")
+		fmt.Println(string(b))
+		return
 	}
 
 	var apps []v1.Application
@@ -151,7 +172,7 @@ func listApplications() {
 }
 
 // listComponents lists all Component resources
-func listComponents() {
+func listComponents(name string) {
 	// Component not supported in standalone mode
 	if standalone {
 		log.Fatalf("'Component' is not supported in standalone mode")
@@ -163,6 +184,16 @@ func listComponents() {
 			log.Printf("Database unavailable: %v", err)
 			return
 		}
+	}
+
+	if name != "" {
+		var comp v1.Component
+		if err := db.DB.Where("metadata_name = ?", name).First(&comp).Error; err != nil {
+			log.Fatalf("Component %s not found: %v", name, err)
+		}
+		b, _ := json.MarshalIndent(comp, "", "  ")
+		fmt.Println(string(b))
+		return
 	}
 
 	var comps []v1.Component
@@ -186,12 +217,54 @@ func listComponents() {
 	w.Flush()
 }
 
+// listVirtualMachineSpec lists VM specs or shows a single spec when name provided
+func listVirtualMachineSpec(name string) {
+	if standalone {
+		log.Fatalf("'VirtualMachineSpec' is not supported in standalone mode")
+	}
+	if db.DB == nil {
+		if err := db.Init(); err != nil {
+			log.Fatalf("Database unavailable: %v", err)
+		}
+	}
+	if name != "" {
+		var vs v1.VirtualMachineSpecResource
+		if err := db.DB.Where("metadata_name = ?", name).First(&vs).Error; err != nil {
+			log.Fatalf("VirtualMachineSpec %s not found: %v", name, err)
+		}
+		b, _ := json.MarshalIndent(vs, "", "  ")
+		fmt.Println(string(b))
+		return
+	}
+	var specs []v1.VirtualMachineSpecResource
+	if err := db.DB.Find(&specs).Error; err != nil {
+		log.Fatalf("Failed to list VirtualMachineSpec: %v", err)
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tTEMPLATE\tSERVICE_OFFERING\tNETWORKS\tVOLUMES")
+	for _, s := range specs {
+		nets := strings.Join(s.Spec.NetworkIDs, ",")
+		volCount := 0
+		if len(s.Spec.Volumes) > 0 {
+			volCount = len(s.Spec.Volumes)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\n",
+			s.Metadata.Name,
+			s.Spec.Template,
+			s.Spec.ServiceOffering,
+			nets,
+			volCount,
+		)
+	}
+	w.Flush()
+}
+
 // listVMs lists all VirtualMachine resources
 func listVMs() {
 	// If running standalone, always query CloudStack directly
 	if standalone {
 		// No DB: query CloudStack API for VMs
-		if err := handlers.ListVMs(); err != nil {
+		if err := handlers.ListVMs(""); err != nil {
 			log.Fatalf("Failed to list VMs: %v", err)
 		}
 		return

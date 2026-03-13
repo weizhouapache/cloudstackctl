@@ -42,12 +42,15 @@ func ApplyAffinityGroup(ag *v1.AffinityGroup) error {
 }
 
 // ListAffinityGroups lists affinity groups in CloudStack.
-func ListAffinityGroups() error {
+func ListAffinityGroups(name string) error {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.AffinityGroup.NewListAffinityGroupsParams()
+	if name != "" {
+		params.SetName(name)
+	}
 	resp, err := client.AffinityGroup.ListAffinityGroups(params)
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)

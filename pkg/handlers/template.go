@@ -11,12 +11,15 @@ import (
 )
 
 // ListTemplates prints a table of templates.
-func ListTemplates() error {
+func ListTemplates(name string) error {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Template.NewListTemplatesParams("")
+	if name != "" {
+		params.SetName(name)
+	}
 	resp, err := client.Template.ListTemplates(params)
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)

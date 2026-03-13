@@ -12,12 +12,15 @@ import (
 )
 
 // ListSSHKeys prints SSH key pairs.
-func ListSSHKeys() error {
+func ListSSHKeys(name string) error {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.SSH.NewListSSHKeyPairsParams()
+	if name != "" {
+		params.SetName(name)
+	}
 	resp, err := client.SSH.ListSSHKeyPairs(params)
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)
@@ -38,6 +41,9 @@ func DescribeSSHKey(name string) error {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.SSH.NewListSSHKeyPairsParams()
+	if name != "" {
+		params.SetName(name)
+	}
 	resp, err := client.SSH.ListSSHKeyPairs(params)
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)
@@ -57,6 +63,9 @@ func DeleteSSHKey(name string) error {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.SSH.NewListSSHKeyPairsParams()
+	if name != "" {
+		params.SetName(name)
+	}
 	resp, err := client.SSH.ListSSHKeyPairs(params)
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)

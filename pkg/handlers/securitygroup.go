@@ -12,12 +12,16 @@ import (
 )
 
 // ListSecurityGroups prints a table of security groups.
-func ListSecurityGroups() error {
+func ListSecurityGroups(name string) error {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.SecurityGroup.NewListSecurityGroupsParams()
+	if name != "" {
+		// Use SDK parameter to filter by security group name when supported
+		params.SetSecuritygroupname(name)
+	}
 	resp, err := client.SecurityGroup.ListSecurityGroups(params)
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)

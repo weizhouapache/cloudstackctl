@@ -12,12 +12,15 @@ import (
 )
 
 // ListVMs queries CloudStack and prints a table of VMs.
-func ListVMs() error {
+func ListVMs(name string) error {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.VirtualMachine.NewListVirtualMachinesParams()
+	if name != "" {
+		params.SetName(name)
+	}
 	resp, err := client.VirtualMachine.ListVirtualMachines(params)
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)

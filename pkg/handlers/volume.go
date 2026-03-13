@@ -12,12 +12,15 @@ import (
 )
 
 // ListVolumes prints a table of volumes.
-func ListVolumes() error {
+func ListVolumes(name string) error {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Volume.NewListVolumesParams()
+	if name != "" {
+		params.SetName(name)
+	}
 	resp, err := client.Volume.ListVolumes(params)
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)
