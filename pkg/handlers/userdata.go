@@ -86,3 +86,21 @@ func DescribeUserData(name string) error {
 	fmt.Println(string(data))
 	return nil
 }
+
+// ResolveUserData returns the CloudStack UserData ID for a given name.
+func ResolveUserData(name string) (string, error) {
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	params := client.User.NewListUserDataParams()
+	params.SetName(name)
+	resp, err := client.User.ListUserData(params)
+	if err != nil {
+		return "", fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if resp == nil || len(resp.UserData) == 0 {
+		return "", fmt.Errorf("userdata %s not found", name)
+	}
+	return resp.UserData[0].Id, nil
+}

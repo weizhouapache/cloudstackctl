@@ -1,4 +1,4 @@
-# cloudstackctl
+# cloudstackctl (csctl)
 
 Kubernetes-style declarative orchestration tool for Apache CloudStack
 

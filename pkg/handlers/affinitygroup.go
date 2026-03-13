@@ -77,3 +77,19 @@ func DescribeAffinityGroup(name string) error {
 	fmt.Println(string(b))
 	return nil
 }
+
+// ResolveAffinityGroup returns the CloudStack affinity group ID for a given name.
+func ResolveAffinityGroup(name string) (string, error) {
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	existing, _, err := client.AffinityGroup.GetAffinityGroupByName(name)
+	if err != nil {
+		return "", fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if existing == nil {
+		return "", fmt.Errorf("affinity group %s not found", name)
+	}
+	return existing.Id, nil
+}

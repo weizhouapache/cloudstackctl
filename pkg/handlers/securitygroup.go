@@ -99,3 +99,19 @@ func ApplySecurityGroup(sg *v1.SecurityGroup) error {
 	log.Printf("Created SecurityGroup %s", sg.Metadata.Name)
 	return nil
 }
+
+// ResolveSecurityGroup returns the CloudStack security group ID for a given name.
+func ResolveSecurityGroup(name string) (string, error) {
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	sg, _, err := client.SecurityGroup.GetSecurityGroupByName(name)
+	if err != nil {
+		return "", fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if sg == nil {
+		return "", fmt.Errorf("security group %s not found", name)
+	}
+	return sg.Id, nil
+}

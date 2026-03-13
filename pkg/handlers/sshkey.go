@@ -94,3 +94,25 @@ func ApplySSHKey(key *v1.SSHKey) error {
 	}
 	return fmt.Errorf("creating or registering SSHKey from controller is not implemented; use CLI standalone to register a keypair")
 }
+
+// ResolveSSHKey returns the SSH keypair name if present in CloudStack.
+func ResolveSSHKey(name string) (string, error) {
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	params := client.SSH.NewListSSHKeyPairsParams()
+	resp, err := client.SSH.ListSSHKeyPairs(params)
+	if err != nil {
+		return "", fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if resp == nil || len(resp.SSHKeyPairs) == 0 {
+		return "", fmt.Errorf("ssh key %s not found", name)
+	}
+	for _, k := range resp.SSHKeyPairs {
+		if k.Name == name {
+			return k.Name, nil
+		}
+	}
+	return "", fmt.Errorf("ssh key %s not found", name)
+}

@@ -92,11 +92,18 @@ func ApplyVolume(vol *v1.Volume) error {
 	}
 
 	// If spec has disk offering and size, attempt creation
-	if vol.Spec.DiskOffering != "" && vol.Spec.SizeGB > 0 {
+	if vol.Spec.DiskOffering != "" {
+		diskOfferingID := vol.Spec.DiskOffering
+		if doID, derr := ResolveDiskOffering(vol.Spec.DiskOffering); derr == nil {
+			diskOfferingID = doID
+		}
+
 		cp := client.Volume.NewCreateVolumeParams()
 		cp.SetName(vol.Metadata.Name)
-		cp.SetDiskofferingid(vol.Spec.DiskOffering)
-		cp.SetSize(int64(vol.Spec.SizeGB))
+		cp.SetDiskofferingid(diskOfferingID)
+		if vol.Spec.SizeGB > 0 {
+			cp.SetSize(int64(vol.Spec.SizeGB))
+		}
 		if _, err := client.Volume.CreateVolume(cp); err != nil {
 			return fmt.Errorf("failed to create volume: %w", err)
 		}
@@ -105,4 +112,22 @@ func ApplyVolume(vol *v1.Volume) error {
 	}
 
 	return fmt.Errorf("creating Volume from controller requires spec.diskOffering and spec.size; use CLI standalone if you need immediate creation")
+}
+
+// ResolveVolume returns the CloudStack volume ID for a given volume name.
+func ResolveVolume(name string) (string, error) {
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	params := client.Volume.NewListVolumesParams()
+	params.SetName(name)
+	resp, err := client.Volume.ListVolumes(params)
+	if err != nil {
+		return "", fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if resp == nil || len(resp.Volumes) == 0 {
+		return "", fmt.Errorf("volume %s not found", name)
+	}
+	return resp.Volumes[0].Id, nil
 }

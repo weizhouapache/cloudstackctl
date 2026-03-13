@@ -73,3 +73,21 @@ func DeleteTemplate(name string) error {
 	log.Printf("Template %s deleted from CloudStack (id=%s)", name, tid)
 	return nil
 }
+
+// ResolveTemplate returns the CloudStack template ID for a given template name.
+func ResolveTemplate(name string) (string, error) {
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	params := client.Template.NewListTemplatesParams("")
+	params.SetName(name)
+	resp, err := client.Template.ListTemplates(params)
+	if err != nil {
+		return "", fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if resp == nil || len(resp.Templates) == 0 {
+		return "", fmt.Errorf("template %s not found", name)
+	}
+	return resp.Templates[0].Id, nil
+}

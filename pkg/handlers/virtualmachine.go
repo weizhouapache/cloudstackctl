@@ -79,6 +79,24 @@ func DeleteVM(name string) error {
 	return nil
 }
 
+// ResolveVirtualMachine returns the CloudStack VM ID for a given VM name.
+func ResolveVirtualMachine(name string) (string, error) {
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	params := client.VirtualMachine.NewListVirtualMachinesParams()
+	params.SetName(name)
+	resp, err := client.VirtualMachine.ListVirtualMachines(params)
+	if err != nil {
+		return "", fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if resp == nil || len(resp.VirtualMachines) == 0 {
+		return "", fmt.Errorf("vm %s not found", name)
+	}
+	return resp.VirtualMachines[0].Id, nil
+}
+
 // ApplyVirtualMachine deploys a virtual machine directly via CloudStack API.
 // This is the standalone-path implementation used when the VM does not
 // reference a managed VM spec.
@@ -100,13 +118,34 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) error {
 		return fmt.Errorf("virtualmachine %s already exists in CloudStack (id=%s); updates are not supported", vm.Metadata.Name, listResp.VirtualMachines[0].Id)
 	}
 
-	params := client.VirtualMachine.NewDeployVirtualMachineParams(vm.Spec.ServiceOffering, vm.Spec.Template, "")
+	// Resolve potential name references to IDs for template, service offering, and networks
+	templateID := vm.Spec.Template
+	if tid, terr := ResolveTemplate(vm.Spec.Template); terr == nil {
+		templateID = tid
+	}
+	serviceOfferingID := vm.Spec.ServiceOffering
+	if soid, soerr := ResolveServiceOffering(vm.Spec.ServiceOffering); soerr == nil {
+		serviceOfferingID = soid
+	}
+
+	// Resolve network names to IDs where provided
+	resolvedNets := make([]string, 0, len(vm.Spec.NetworkIDs))
+	for _, n := range vm.Spec.NetworkIDs {
+		if nid, nerr := ResolveNetwork(n); nerr == nil {
+			resolvedNets = append(resolvedNets, nid)
+		} else {
+			// assume already an ID
+			resolvedNets = append(resolvedNets, n)
+		}
+	}
+
+	params := client.VirtualMachine.NewDeployVirtualMachineParams(serviceOfferingID, templateID, "")
 	params.SetName(vm.Metadata.Name)
 	if vm.Spec.ProjectID != "" {
 		params.SetProjectid(vm.Spec.ProjectID)
 	}
 	if len(vm.Spec.NetworkIDs) > 0 {
-		params.SetNetworkids(vm.Spec.NetworkIDs)
+		params.SetNetworkids(resolvedNets)
 	}
 	if len(vm.Spec.SSHKeys) > 0 {
 		params.SetKeypairs(vm.Spec.SSHKeys)
