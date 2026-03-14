@@ -2,12 +2,18 @@ package handlers
 
 import (
 	"fmt"
+	"regexp"
 
 	"cloudstackctl/pkg/cloudstack"
 )
 
 // ResolveZone returns the CloudStack zone ID for a zone name.
 func ResolveZone(name string) (string, error) {
+	// If the value already looks like a UUID, treat it as an ID and return it.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
@@ -26,6 +32,11 @@ func ResolveZone(name string) (string, error) {
 
 // ResolveServiceOffering returns the service offering ID for a name.
 func ResolveServiceOffering(name string) (string, error) {
+	// If the value looks like a UUID, treat it as an ID and return it.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
@@ -44,6 +55,11 @@ func ResolveServiceOffering(name string) (string, error) {
 
 // ResolveDiskOffering returns the disk offering ID for a name.
 func ResolveDiskOffering(name string) (string, error) {
+	// If the value looks like a UUID, treat it as an ID and return it.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
@@ -62,6 +78,11 @@ func ResolveDiskOffering(name string) (string, error) {
 
 // ResolveProject returns the CloudStack project ID for a given project name.
 func ResolveProject(name string) (string, error) {
+	// If the value looks like a UUID, treat it as an ID and return it.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
@@ -76,4 +97,10 @@ func ResolveProject(name string) (string, error) {
 		return "", fmt.Errorf("project %s not found", name)
 	}
 	return resp.Projects[0].Id, nil
+}
+
+// IsUUID returns true if the provided string matches a UUID pattern.
+func IsUUID(s string) bool {
+	var uuidRegex = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	return uuidRegex.MatchString(s)
 }

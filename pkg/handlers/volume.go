@@ -107,6 +107,14 @@ func ApplyVolume(vol *v1.Volume) error {
 		if vol.Spec.SizeGB > 0 {
 			cp.SetSize(int64(vol.Spec.SizeGB))
 		}
+		// If a zone is provided, resolve its name to an ID; fail if not resolvable.
+		if vol.Spec.Zone != "" {
+			zid, zerr := ResolveZone(vol.Spec.Zone)
+			if zerr != nil {
+				return fmt.Errorf("failed to resolve zone %s: %w", vol.Spec.Zone, zerr)
+			}
+			cp.SetZoneid(zid)
+		}
 		if _, err := client.Volume.CreateVolume(cp); err != nil {
 			return fmt.Errorf("failed to create volume: %w", err)
 		}
@@ -119,6 +127,11 @@ func ApplyVolume(vol *v1.Volume) error {
 
 // ResolveVolume returns the CloudStack volume ID for a given volume name.
 func ResolveVolume(name string) (string, error) {
+	// If the value looks like a UUID, treat it as an ID and return it.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)

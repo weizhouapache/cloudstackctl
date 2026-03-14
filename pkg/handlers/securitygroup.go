@@ -106,6 +106,11 @@ func ApplySecurityGroup(sg *v1.SecurityGroup) error {
 
 // ResolveSecurityGroup returns the CloudStack security group ID for a given name.
 func ResolveSecurityGroup(name string) (string, error) {
+	// UUID inputs are treated as IDs.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)

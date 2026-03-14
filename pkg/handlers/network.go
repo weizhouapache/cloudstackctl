@@ -13,6 +13,11 @@ import (
 
 // ResolveNetwork returns the CloudStack network ID for a given network name.
 func ResolveNetwork(name string) (string, error) {
+	// If the value looks like a UUID, treat it as an ID and return it.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
@@ -140,7 +145,12 @@ func ApplyNetwork(netRes *v1.Network) error {
 		if netRes.Spec.NetworkOffering == "" || netRes.Spec.Zone == "" {
 			return fmt.Errorf("network create requires spec.networkOffering and spec.zone in standalone mode")
 		}
-		createParams := client.Network.NewCreateNetworkParams(name, netRes.Spec.NetworkOffering, netRes.Spec.Zone)
+		// Resolve zone name to ID; require resolution or return an error.
+		zoneID, zerr := ResolveZone(netRes.Spec.Zone)
+		if zerr != nil {
+			return fmt.Errorf("failed to resolve zone %s: %w", netRes.Spec.Zone, zerr)
+		}
+		createParams := client.Network.NewCreateNetworkParams(name, netRes.Spec.NetworkOffering, zoneID)
 		if netRes.Spec.Description != "" {
 			createParams.SetDisplaytext(netRes.Spec.Description)
 		}

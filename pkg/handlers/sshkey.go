@@ -106,6 +106,11 @@ func ApplySSHKey(key *v1.SSHKey) error {
 
 // ResolveSSHKey returns the SSH keypair name if present in CloudStack.
 func ResolveSSHKey(name string) (string, error) {
+	// If the value looks like a UUID, treat it as an ID and return it.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)

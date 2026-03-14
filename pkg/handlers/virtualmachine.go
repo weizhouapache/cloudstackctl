@@ -122,28 +122,37 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) error {
 	}
 
 	// Resolve potential name references to IDs for template, service offering, and networks
-	templateID := vm.Spec.Template
-	if tid, terr := ResolveTemplate(vm.Spec.Template); terr == nil {
-		templateID = tid
+	// Resolve template and service offering names to IDs; require resolution.
+	templateID, terr := ResolveTemplate(vm.Spec.Template)
+	if terr != nil {
+		return fmt.Errorf("failed to resolve template %s: %w", vm.Spec.Template, terr)
 	}
-	serviceOfferingID := vm.Spec.ServiceOffering
-	if soid, soerr := ResolveServiceOffering(vm.Spec.ServiceOffering); soerr == nil {
-		serviceOfferingID = soid
+	serviceOfferingID, soerr := ResolveServiceOffering(vm.Spec.ServiceOffering)
+	if soerr != nil {
+		return fmt.Errorf("failed to resolve service offering %s: %w", vm.Spec.ServiceOffering, soerr)
 	}
 
 	// Resolve network names to IDs where provided
 	resolvedNets := make([]string, 0, len(vm.Spec.NetworkIDs))
 	for _, n := range vm.Spec.NetworkIDs {
-		if nid, nerr := ResolveNetwork(n); nerr == nil {
-			resolvedNets = append(resolvedNets, nid)
-		} else {
-			// assume already an ID
-			resolvedNets = append(resolvedNets, n)
+		nid, nerr := ResolveNetwork(n)
+		if nerr != nil {
+			return fmt.Errorf("failed to resolve network %s: %w", n, nerr)
 		}
+		resolvedNets = append(resolvedNets, nid)
 	}
 
 	params := client.VirtualMachine.NewDeployVirtualMachineParams(serviceOfferingID, templateID, "")
 	params.SetName(vm.Metadata.Name)
+	// If a zone is provided in the spec, try to resolve the zone name to an ID.
+	// If resolution fails, assume the provided value is already an ID and use it.
+	if vm.Spec.Zone != "" {
+		zid, zerr := ResolveZone(vm.Spec.Zone)
+		if zerr != nil {
+			return fmt.Errorf("failed to resolve zone %s: %w", vm.Spec.Zone, zerr)
+		}
+		params.SetZoneid(zid)
+	}
 	if vm.Spec.Project != "" {
 		// Accept either a project UUID or a project name; try resolving name first.
 		if pid, perr := ResolveProject(vm.Spec.Project); perr == nil {

@@ -87,6 +87,11 @@ func DescribeAffinityGroup(name string) error {
 
 // ResolveAffinityGroup returns the CloudStack affinity group ID for a given name.
 func ResolveAffinityGroup(name string) (string, error) {
+	// Treat UUID inputs as IDs.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)

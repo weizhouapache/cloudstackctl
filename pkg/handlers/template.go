@@ -79,6 +79,11 @@ func DeleteTemplate(name string) error {
 
 // ResolveTemplate returns the CloudStack template ID for a given template name.
 func ResolveTemplate(name string) (string, error) {
+	// If the value looks like a UUID, treat it as an ID and return it.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)

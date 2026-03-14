@@ -79,6 +79,11 @@ func DeleteSnapshot(name string) error {
 
 // ResolveSnapshot returns the CloudStack snapshot ID for a given snapshot name.
 func ResolveSnapshot(name string) (string, error) {
+	// If the value looks like a UUID, treat it as an ID and return it.
+	if IsUUID(name) {
+		return name, nil
+	}
+
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
