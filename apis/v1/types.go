@@ -37,25 +37,25 @@ type Application struct {
 
 // ApplicationSpec defines the desired state of an Application
 type ApplicationSpec struct {
-	Project    string         `yaml:"project"`                           // CloudStack project ID or name
-	Components []ComponentRef `yaml:"components" gorm:"serializer:json"` // Dependent components (ordered)
+	Project    string         `json:"project,omitempty" yaml:"project"`                              // CloudStack project ID or name
+	Components []ComponentRef `json:"components,omitempty" yaml:"components" gorm:"serializer:json"` // Dependent components (ordered)
 }
 
 // ComponentRef references a Component within an Application
 type ComponentRef struct {
-	Name               string        `yaml:"name"`               // Component name
-	VirtualMachineSpec string        `yaml:"virtualMachineSpec"` // Reusable VM spec name
-	Replicas           int           `yaml:"replicas"`           // Number of VM replicas
-	HealthChecks       []HealthCheck `yaml:"healthChecks,omitempty" gorm:"serializer:json"`
+	Name               string        `json:"name" yaml:"name"`                             // Component name
+	VirtualMachineSpec string        `json:"virtualMachineSpec" yaml:"virtualMachineSpec"` // Reusable VM spec name
+	Replicas           int           `json:"replicas" yaml:"replicas"`                     // Number of VM replicas
+	HealthChecks       []HealthCheck `json:"healthChecks,omitempty" yaml:"healthChecks,omitempty" gorm:"serializer:json"`
 }
 
 // HealthCheck defines a simple health check configuration for VMs
 type HealthCheck struct {
-	Type     string `yaml:"type"`               // e.g. ping, http
-	Interval string `yaml:"interval,omitempty"` // e.g. 10s
-	Timeout  string `yaml:"timeout,omitempty"`  // e.g. 5s
-	Path     string `yaml:"path,omitempty"`     // HTTP path for http checks
-	Port     int    `yaml:"port,omitempty"`     // Optional port for TCP/HTTP checks
+	Type     string `json:"type" yaml:"type"`                             // e.g. ping, http
+	Interval string `json:"interval,omitempty" yaml:"interval,omitempty"` // e.g. 10s
+	Timeout  string `json:"timeout,omitempty" yaml:"timeout,omitempty"`   // e.g. 5s
+	Path     string `json:"path,omitempty" yaml:"path,omitempty"`         // HTTP path for http checks
+	Port     int    `json:"port,omitempty" yaml:"port,omitempty"`         // Optional port for TCP/HTTP checks
 }
 
 // Component represents a set of VMs for a specific role (e.g. frontend/backend)
@@ -74,18 +74,18 @@ type Component struct {
 
 // ComponentSpec defines the desired state of a Component
 type ComponentSpec struct {
-	VirtualMachineSpec string             `yaml:"virtualMachineSpec"` // Reusable VM spec name
-	Replicas           int                `yaml:"replicas"`           // Number of VM replicas
-	Overrides          ComponentOverrides `yaml:"overrides,omitempty" gorm:"serializer:json"`
-	HealthChecks       []HealthCheck      `yaml:"healthChecks,omitempty" gorm:"serializer:json"`
+	VirtualMachineSpec string             `json:"virtualMachineSpec" yaml:"virtualMachineSpec"` // Reusable VM spec name
+	Replicas           int                `json:"replicas" yaml:"replicas"`                     // Number of VM replicas
+	Overrides          ComponentOverrides `json:"overrides,omitempty" yaml:"overrides,omitempty" gorm:"serializer:json"`
+	HealthChecks       []HealthCheck      `json:"healthChecks,omitempty" yaml:"healthChecks,omitempty" gorm:"serializer:json"`
 }
 
 // ComponentOverrides allows limited, safe overrides to a reused VM spec
 type ComponentOverrides struct {
-	UserDataRefs   []string `yaml:"userDataRefs,omitempty" gorm:"serializer:json"`
-	SSHKeys        []string `yaml:"sshKeys,omitempty" gorm:"serializer:json"`
-	SecurityGroups []string `yaml:"securityGroups,omitempty" gorm:"serializer:json"`
-	AffinityGroups []string `yaml:"affinityGroups,omitempty" gorm:"serializer:json"`
+	UserDataRefs   []string `json:"userDataRefs,omitempty" yaml:"userDataRefs,omitempty" gorm:"serializer:json"`
+	SSHKeys        []string `json:"sshKeys,omitempty" yaml:"sshKeys,omitempty" gorm:"serializer:json"`
+	SecurityGroups []string `json:"securityGroups,omitempty" yaml:"securityGroups,omitempty" gorm:"serializer:json"`
+	AffinityGroups []string `json:"affinityGroups,omitempty" yaml:"affinityGroups,omitempty" gorm:"serializer:json"`
 }
 
 // VirtualMachine represents an individual VM instance in CloudStack
@@ -102,19 +102,19 @@ type VirtualMachine struct {
 
 // VirtualMachineSpec defines reusable VM configuration (template/offering/network)
 type VirtualMachineSpec struct {
-	Zone            string        `yaml:"zone"`                                          // CloudStack zone ID or name
-	Project         string        `yaml:"project"`                                       // CloudStack project ID or name
-	Template        string        `yaml:"template"`                                      // VM template name/ID
-	ServiceOffering string        `yaml:"serviceOffering"`                               // VM service offering (size)
-	NetworkIDs      []string      `yaml:"networkIds" gorm:"serializer:json"`             // Attached networks
-	SSHKeys         []string      `yaml:"sshKeys" gorm:"serializer:json"`                // SSH keys for access
-	SecurityGroups  []string      `yaml:"securityGroups" gorm:"serializer:json"`         // Firewall groups
-	AffinityGroups  []string      `yaml:"affinityGroups" gorm:"serializer:json"`         // Host/VM affinity rules
-	UserDataRefs    []string      `yaml:"userDataRefs,omitempty" gorm:"serializer:json"` // Optional references to UserData resources
-	Volumes         []VolumeSpec  `yaml:"volumes,omitempty" gorm:"serializer:json"`      // Desired or observed attached volumes
-	HealthChecks    []HealthCheck `yaml:"healthChecks,omitempty" gorm:"serializer:json"`
+	Zone            string        `json:"zone,omitempty" yaml:"zone"`                                                  // CloudStack zone ID or name
+	Project         string        `json:"project,omitempty" yaml:"project"`                                            // CloudStack project ID or name
+	Template        string        `json:"template,omitempty" yaml:"template"`                                          // VM template name/ID
+	ServiceOffering string        `json:"serviceOffering,omitempty" yaml:"serviceOffering"`                            // VM service offering (size)
+	NetworkIDs      []string      `json:"networkIds,omitempty" yaml:"networkIds" gorm:"serializer:json"`               // Attached networks
+	SSHKeys         []string      `json:"sshKeys,omitempty" yaml:"sshKeys" gorm:"serializer:json"`                     // SSH keys for access
+	SecurityGroups  []string      `json:"securityGroups,omitempty" yaml:"securityGroups" gorm:"serializer:json"`       // Firewall groups
+	AffinityGroups  []string      `json:"affinityGroups,omitempty" yaml:"affinityGroups" gorm:"serializer:json"`       // Host/VM affinity rules
+	UserDataRefs    []string      `json:"userDataRefs,omitempty" yaml:"userDataRefs,omitempty" gorm:"serializer:json"` // Optional references to UserData resources
+	Volumes         []VolumeSpec  `json:"volumes,omitempty" yaml:"volumes,omitempty" gorm:"serializer:json"`           // Desired or observed attached volumes
+	HealthChecks    []HealthCheck `json:"healthChecks,omitempty" yaml:"healthChecks,omitempty" gorm:"serializer:json"`
 	// Parameters allows passing provider-specific deploy-time options
-	Parameters map[string]string `yaml:"parameters,omitempty" gorm:"serializer:json"`
+	Parameters map[string]string `json:"parameters,omitempty" yaml:"parameters,omitempty" gorm:"serializer:json"`
 }
 
 // VirtualMachineSpecResource is the persisted wrapper for reusable VM specs
@@ -139,15 +139,15 @@ type Network struct {
 
 // NetworkSpec defines the desired state of a Network
 type NetworkSpec struct {
-	Zone                   string      `yaml:"zone"`                             // CloudStack zone ID or name
-	NetworkOffering        string      `yaml:"networkOffering,omitempty"`        // Network offering ID or name for creation
-	Vlan                   interface{} `yaml:"vlan,omitempty"`                   // Optional VLAN tag for shared networks; may be string or number
-	BypassVlanOverlapCheck bool        `yaml:"bypassVlanOverlapCheck,omitempty"` // When true, do not normalize or validate VLAN value
-	Description            string      `yaml:"description,omitempty"`            // Human-friendly description / displayText
-	Gateway                string      `yaml:"gateway,omitempty"`                // Gateway IP for shared networks
-	Netmask                string      `yaml:"netmask,omitempty"`                // Netmask for shared networks
-	StartIP                string      `yaml:"startIp,omitempty"`                // Start IP for static IP range (shared network)
-	EndIP                  string      `yaml:"endIp,omitempty"`                  // End IP for static IP range (shared network)
+	Zone                   string      `json:"zone,omitempty" yaml:"zone"`                                               // CloudStack zone ID or name
+	NetworkOffering        string      `json:"networkOffering,omitempty" yaml:"networkOffering,omitempty"`               // Network offering ID or name for creation
+	Vlan                   interface{} `json:"vlan,omitempty" yaml:"vlan,omitempty"`                                     // Optional VLAN tag for shared networks; may be string or number
+	BypassVlanOverlapCheck bool        `json:"bypassVlanOverlapCheck,omitempty" yaml:"bypassVlanOverlapCheck,omitempty"` // When true, do not normalize or validate VLAN value
+	Description            string      `json:"description,omitempty" yaml:"description,omitempty"`                       // Human-friendly description / displayText
+	Gateway                string      `json:"gateway,omitempty" yaml:"gateway,omitempty"`                               // Gateway IP for shared networks
+	Netmask                string      `json:"netmask,omitempty" yaml:"netmask,omitempty"`                               // Netmask for shared networks
+	StartIP                string      `json:"startIp,omitempty" yaml:"startIp,omitempty"`                               // Start IP for static IP range (shared network)
+	EndIP                  string      `json:"endIp,omitempty" yaml:"endIp,omitempty"`                                   // End IP for static IP range (shared network)
 }
 
 // Volume represents a disk attached to a VM in CloudStack
@@ -184,7 +184,7 @@ type SSHKey struct {
 
 // SSHKeySpec holds the public key material for registering an SSH keypair
 type SSHKeySpec struct {
-	PublicKey string `yaml:"publicKey"`
+	PublicKey string `json:"publicKey,omitempty" yaml:"publicKey"`
 }
 
 // SecurityGroup represents a firewall rule set for VMs in CloudStack
@@ -208,7 +208,7 @@ type AffinityGroup struct {
 
 // AffinitySpec defines the type of affinity rule
 type AffinitySpec struct {
-	Type string `yaml:"type"` // hostAntiAffinity/hostAffinity
+	Type string `json:"type,omitempty" yaml:"type"` // hostAntiAffinity/hostAffinity
 }
 
 // UserData represents initialization scripts for VMs in CloudStack
@@ -222,7 +222,7 @@ type UserData struct {
 
 // UserDataSpec defines the initialization script content
 type UserDataSpec struct {
-	Script string `yaml:"script"` // Base64-encoded user data script
+	Script string `json:"script,omitempty" yaml:"script"` // Base64-encoded user data script
 }
 
 // TableName overrides to ensure consistent table names across DB operations
