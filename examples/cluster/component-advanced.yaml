@@ -14,7 +14,7 @@ spec:
     volumes:
       - name: data-disk
         diskOffering: standard-hdd
-        size: 50GB
+        size: 50
   healthChecks:
     - type: ping
       interval: 10s

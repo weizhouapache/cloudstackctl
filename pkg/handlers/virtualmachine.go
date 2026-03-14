@@ -153,6 +153,11 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) error {
 	if len(vm.Spec.SSHKeys) > 0 {
 		params.SetKeypairs(vm.Spec.SSHKeys)
 	}
+	// If parameters are provided, pass them as the CloudStack 'details' map
+	// first (supported by the SDK).
+	if vm.Spec.Parameters != nil {
+		params.SetDetails(vm.Spec.Parameters)
+	}
 
 	resp, err := client.VirtualMachine.DeployVirtualMachine(params)
 	if err != nil {

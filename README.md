@@ -127,7 +127,7 @@ spec:
   volumes:
     - name: data-disk
       diskOffering: standard-hdd
-      size: 50GB
+      size: 50
 ```
 
 ### Component Reusing VirtualMachineSpec
@@ -185,10 +185,9 @@ spec:
   volumes:
     - name: data-disk
       diskOffering: standard-hdd
-      size: 50GB
+      size: 50
   affinityGroups:
-    - type: hostAntiAffinity
-      name: vm-spread
+    - vm-spread
   securityGroups:
     - default-sec
   parameters:

@@ -112,6 +112,8 @@ type VirtualMachineSpec struct {
 	UserDataRefs    []string      `yaml:"userDataRefs,omitempty" gorm:"serializer:json"` // Optional references to UserData resources
 	Volumes         []VolumeSpec  `yaml:"volumes,omitempty" gorm:"serializer:json"`      // Desired or observed attached volumes
 	HealthChecks    []HealthCheck `yaml:"healthChecks,omitempty" gorm:"serializer:json"`
+	// Parameters allows passing provider-specific deploy-time options
+	Parameters map[string]string `yaml:"parameters,omitempty" gorm:"serializer:json"`
 }
 
 // VirtualMachineSpecResource is the persisted wrapper for reusable VM specs
