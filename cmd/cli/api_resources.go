@@ -26,7 +26,7 @@ var apiResourcesCmd = &cobra.Command{
 		resources := []res{
 			{Name: "applications", ShortNames: "app,apps", APIVersion: v1.APIVersion, Managed: true, Kind: "Application"},
 			{Name: "components", ShortNames: "comp,comps", APIVersion: v1.APIVersion, Managed: true, Kind: "Component"},
-			{Name: "virtualmachines", ShortNames: "vm,vms", APIVersion: v1.APIVersion, Managed: false, Kind: "VirtualMachine"},
+			{Name: "virtualmachines", ShortNames: "vm,vms", APIVersion: v1.APIVersion, Managed: true, Kind: "VirtualMachine"},
 			{Name: "virtualmachinespecs", ShortNames: "vmspec,vmspecs", APIVersion: v1.APIVersion, Managed: true, Kind: "VirtualMachineSpec"},
 			{Name: "networks", ShortNames: "net,nets,network,networks", APIVersion: v1.APIVersion, Managed: false, Kind: "Network"},
 			{Name: "volumes", ShortNames: "vol,vols,volume,volumes", APIVersion: v1.APIVersion, Managed: false, Kind: "Volume"},
@@ -37,11 +37,41 @@ var apiResourcesCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tSHORTNAMES\tAPIVERSION\tManaged\tKIND")
+		fmt.Fprintln(w, "NAME\tSHORTNAMES\tAPIVERSION\tManaged\tSupported\tKIND")
 
 		for _, r := range resources {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\n",
-				r.Name, r.ShortNames, r.APIVersion, r.Managed, r.Kind)
+			supported := true
+			if standalone {
+				// In standalone mode, controller-managed resources are not supported
+				// except VirtualMachine which is supported in both modes.
+				switch r.Kind {
+				case "VirtualMachine":
+					supported = true
+				case "Application", "Component", "VirtualMachineSpec":
+					supported = false
+				default:
+					supported = true
+				}
+			}
+			var suppStr string
+			if supported {
+				suppStr = "yes"
+			} else {
+				suppStr = "no"
+			}
+
+			// Managed column: show boolean in controller mode, "n/a" in standalone mode
+			var managedStr string
+			if standalone {
+				managedStr = "n/a"
+			} else if r.Managed {
+				managedStr = "yes"
+			} else {
+				managedStr = "no"
+			}
+
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+				r.Name, r.ShortNames, r.APIVersion, managedStr, suppStr, r.Kind)
 		}
 
 		w.Flush()
