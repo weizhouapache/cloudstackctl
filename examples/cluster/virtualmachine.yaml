@@ -4,4 +4,3 @@ metadata:
   name: example-vm-cluster
 spec:
   virtualMachineSpec: frontend-vmspec
-  projectId: ""

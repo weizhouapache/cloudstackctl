@@ -36,12 +36,12 @@ func ListApplications(name string) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tPROJECT ID\tSTATUS\tREADY\tDRIFT")
+	fmt.Fprintln(w, "NAME\tPROJECT\tSTATUS\tREADY\tDRIFT")
 
 	for _, app := range apps {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%t\n",
 			app.Metadata.Name,
-			app.Spec.ProjectID,
+			app.Spec.Project,
 			app.Status.ObservedState,
 			app.Status.Ready,
 			app.Status.Drift,

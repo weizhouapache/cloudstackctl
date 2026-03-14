@@ -144,8 +144,13 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) error {
 
 	params := client.VirtualMachine.NewDeployVirtualMachineParams(serviceOfferingID, templateID, "")
 	params.SetName(vm.Metadata.Name)
-	if vm.Spec.ProjectID != "" {
-		params.SetProjectid(vm.Spec.ProjectID)
+	if vm.Spec.Project != "" {
+		// Accept either a project UUID or a project name; try resolving name first.
+		if pid, perr := ResolveProject(vm.Spec.Project); perr == nil {
+			params.SetProjectid(pid)
+		} else {
+			params.SetProjectid(vm.Spec.Project)
+		}
 	}
 	if len(vm.Spec.NetworkIDs) > 0 {
 		params.SetNetworkids(resolvedNets)

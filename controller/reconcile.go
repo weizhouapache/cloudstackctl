@@ -172,7 +172,7 @@ func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 
 	// Project and zone
 	if v.Projectid != "" {
-		obs.ProjectID = v.Projectid
+		obs.Project = v.Projectid
 	}
 
 	// Volumes: list volumes attached to the VM if we have CloudStack ID

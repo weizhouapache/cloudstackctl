@@ -37,7 +37,7 @@ type Application struct {
 
 // ApplicationSpec defines the desired state of an Application
 type ApplicationSpec struct {
-	ProjectID  string         `yaml:"projectId"`                         // CloudStack project ID
+	Project    string         `yaml:"project"`                           // CloudStack project ID or name
 	Components []ComponentRef `yaml:"components" gorm:"serializer:json"` // Dependent components (ordered)
 }
 
@@ -102,7 +102,8 @@ type VirtualMachine struct {
 
 // VirtualMachineSpec defines reusable VM configuration (template/offering/network)
 type VirtualMachineSpec struct {
-	ProjectID       string        `yaml:"projectId"`                                     // CloudStack project ID
+	Zone            string        `yaml:"zone"`                                          // CloudStack zone ID or name
+	Project         string        `yaml:"project"`                                       // CloudStack project ID or name
 	Template        string        `yaml:"template"`                                      // VM template name/ID
 	ServiceOffering string        `yaml:"serviceOffering"`                               // VM service offering (size)
 	NetworkIDs      []string      `yaml:"networkIds" gorm:"serializer:json"`             // Attached networks
@@ -138,13 +139,13 @@ type Network struct {
 
 // NetworkSpec defines the desired state of a Network
 type NetworkSpec struct {
-	ZoneID            string `yaml:"zoneId"`                      // CloudStack zone ID
-	NetworkOfferingID string `yaml:"networkOfferingId,omitempty"` // Network offering ID for creation
-	Description       string `yaml:"description,omitempty"`       // Human-friendly description / displayText
-	Gateway           string `yaml:"gateway,omitempty"`           // Gateway IP for shared networks
-	Netmask           string `yaml:"netmask,omitempty"`           // Netmask for shared networks
-	StartIP           string `yaml:"startIp,omitempty"`           // Start IP for static IP range (shared network)
-	EndIP             string `yaml:"endIp,omitempty"`             // End IP for static IP range (shared network)
+	Zone            string `yaml:"zone"`                      // CloudStack zone ID or name
+	NetworkOffering string `yaml:"networkOffering,omitempty"` // Network offering ID or name for creation
+	Description     string `yaml:"description,omitempty"`     // Human-friendly description / displayText
+	Gateway         string `yaml:"gateway,omitempty"`         // Gateway IP for shared networks
+	Netmask         string `yaml:"netmask,omitempty"`         // Netmask for shared networks
+	StartIP         string `yaml:"startIp,omitempty"`         // Start IP for static IP range (shared network)
+	EndIP           string `yaml:"endIp,omitempty"`           // End IP for static IP range (shared network)
 }
 
 // Volume represents a disk attached to a VM in CloudStack
@@ -159,6 +160,7 @@ type Volume struct {
 
 // VolumeSpec defines the desired state of a Volume
 type VolumeSpec struct {
+	Zone         string `yaml:"zone"`                // CloudStack zone ID or name
 	DiskOffering string `yaml:"diskOffering"`        // Disk offering type (HDD/SSD)
 	SizeGB       int    `yaml:"size" gorm:"size_gb"` // Disk size in GB
 	ID           string `yaml:"id,omitempty" gorm:"column:volume_id"`

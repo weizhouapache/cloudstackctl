@@ -59,3 +59,21 @@ func ResolveDiskOffering(name string) (string, error) {
 	}
 	return resp.DiskOfferings[0].Id, nil
 }
+
+// ResolveProject returns the CloudStack project ID for a given project name.
+func ResolveProject(name string) (string, error) {
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	params := client.Project.NewListProjectsParams()
+	params.SetName(name)
+	resp, err := client.Project.ListProjects(params)
+	if err != nil {
+		return "", fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if resp == nil || len(resp.Projects) == 0 {
+		return "", fmt.Errorf("project %s not found", name)
+	}
+	return resp.Projects[0].Id, nil
+}

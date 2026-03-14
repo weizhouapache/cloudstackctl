@@ -3,7 +3,6 @@ kind: Application
 metadata:
   name: example-app
 spec:
-  projectId: 987e6543-e21b-12d3-a456-426655440000
   components:
     - name: frontend
       virtualMachineSpec: basic-vm-spec

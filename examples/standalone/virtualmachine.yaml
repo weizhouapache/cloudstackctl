@@ -3,7 +3,7 @@ kind: VirtualMachine
 metadata:
   name: standalone-vm
 spec:
-  projectId: 987e6543-e21b-12d3-a456-426655440000
+  zone: zone-1
   template: ubuntu-22.04
   serviceOffering: medium
   networkIds:

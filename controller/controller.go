@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/apache/cloudstack-go/v2/cloudstack"
@@ -567,8 +568,12 @@ func (c *Controller) applyVM(vm *v1.VirtualMachine) error {
 		// search CloudStack by name and project
 		params := c.csClient.VirtualMachine.NewListVirtualMachinesParams()
 		params.SetName(vm.Metadata.Name)
-		if vm.Spec.ProjectID != "" {
-			params.SetProjectid(vm.Spec.ProjectID)
+		if vm.Spec.Project != "" {
+			if pid, perr := handlers.ResolveProject(vm.Spec.Project); perr == nil {
+				params.SetProjectid(pid)
+			} else {
+				params.SetProjectid(vm.Spec.Project)
+			}
 		}
 		tags := map[string]string{"managed_by": "cloudstackctl"}
 		params.SetTags(tags)
@@ -618,7 +623,7 @@ func compareVMSpec(a, b v1.VirtualMachineSpec) bool {
 	if a.ServiceOffering != b.ServiceOffering {
 		return false
 	}
-	if a.ProjectID != b.ProjectID {
+	if a.Project != b.Project {
 		return false
 	}
 	if len(a.NetworkIDs) != len(b.NetworkIDs) {
@@ -673,7 +678,14 @@ func (c *Controller) createVM(vm *v1.VirtualMachine) error {
 		"",
 	)
 	params.SetName(vm.Metadata.Name)
-	params.SetProjectid(vm.Spec.ProjectID)
+	// Accept project name or ID
+	if vm.Spec.Project != "" {
+		if pid, perr := handlers.ResolveProject(vm.Spec.Project); perr == nil {
+			params.SetProjectid(pid)
+		} else {
+			params.SetProjectid(vm.Spec.Project)
+		}
+	}
 	if len(vm.Spec.NetworkIDs) > 0 {
 		params.SetNetworkids(vm.Spec.NetworkIDs)
 	}
@@ -681,6 +693,32 @@ func (c *Controller) createVM(vm *v1.VirtualMachine) error {
 	// Add SSH key
 	if len(vm.Spec.SSHKeys) > 0 {
 		params.SetKeypair(vm.Spec.SSHKeys[0])
+	}
+
+	// Apply optional deploy parameters from the VM spec where possible.
+	// This attempts to call SDK setter methods (e.g., SetBootMode) if they exist.
+	if vm.Spec.Parameters != nil {
+		pv := reflect.ValueOf(params)
+		for k, v := range vm.Spec.Parameters {
+			parts := strings.FieldsFunc(k, func(r rune) bool { return r == '_' || r == '-' || r == ' ' })
+			for i := range parts {
+				parts[i] = strings.Title(parts[i])
+			}
+			camel := strings.Join(parts, "")
+			candidates := []string{"Set" + camel, "Set" + strings.Title(k)}
+			applied := false
+			for _, m := range candidates {
+				meth := pv.MethodByName(m)
+				if meth.IsValid() && meth.Type().NumIn() == 1 && meth.Type().In(0).Kind() == reflect.String {
+					meth.Call([]reflect.Value{reflect.ValueOf(v)})
+					applied = true
+					break
+				}
+			}
+			if !applied {
+				log.Printf("info: VM parameter '%s' not applied (no SDK setter found)", k)
+			}
+		}
 	}
 
 	// Tagging is handled after deployment via the Resourcetags service below.

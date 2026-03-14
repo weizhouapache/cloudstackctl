@@ -83,7 +83,7 @@ Quick reference for the key fields users will commonly set for higher-level reso
 | Field | Type | Description |
 |---|---|---|
 | `metadata.name` | string | Application name |
-| `spec.projectId` | string | CloudStack project UUID |
+| `spec.project` | string | CloudStack project UUID or name |
 | `spec.components` | list | Ordered list of component references (name, vmspec, replicas) |
 
 **Component**
@@ -138,7 +138,7 @@ kind: Application
 metadata:
   name: app-with-reused-vmspec
 spec:
-  projectId: 987e6543-e21b-12d3-a456-426655440000
+  project: 987e6543-e21b-12d3-a456-426655440000
   components:
     - name: frontend
       virtualMachineSpec: basic-vm-spec
@@ -157,7 +157,7 @@ kind: Application
 metadata:
   name: simple-app
 spec:
-  projectId: 987e6543-e21b-12d3-a456-426655440000
+  project: 987e6543-e21b-12d3-a456-426655440000
   components:
     - name: frontend
       virtualMachineSpec: basic-vm-spec
@@ -175,7 +175,7 @@ kind: VirtualMachine
 metadata:
   name: standalone-vm
 spec:
-  projectId: 987e6543-e21b-12d3-a456-426655440000
+  project: 987e6543-e21b-12d3-a456-426655440000
   template: ubuntu-22.04
   serviceOffering: medium
   networkIds:

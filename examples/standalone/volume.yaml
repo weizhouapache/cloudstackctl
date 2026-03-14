@@ -6,4 +6,4 @@ spec:
   name: data-disk
   diskOffering: standard-hdd
   size: 50
-  projectId: 987e6543-e21b-12d3-a456-426655440000
+  zone: zone-1

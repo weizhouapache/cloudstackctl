@@ -137,10 +137,10 @@ func ApplyNetwork(netRes *v1.Network) error {
 
 	// Not found -> create
 	if listResp == nil || len(listResp.Networks) == 0 {
-		if netRes.Spec.NetworkOfferingID == "" || netRes.Spec.ZoneID == "" {
-			return fmt.Errorf("network create requires spec.networkOfferingId and spec.zoneId in standalone mode")
+		if netRes.Spec.NetworkOffering == "" || netRes.Spec.Zone == "" {
+			return fmt.Errorf("network create requires spec.networkOffering and spec.zone in standalone mode")
 		}
-		createParams := client.Network.NewCreateNetworkParams(name, netRes.Spec.NetworkOfferingID, netRes.Spec.ZoneID)
+		createParams := client.Network.NewCreateNetworkParams(name, netRes.Spec.NetworkOffering, netRes.Spec.Zone)
 		if netRes.Spec.Description != "" {
 			createParams.SetDisplaytext(netRes.Spec.Description)
 		}

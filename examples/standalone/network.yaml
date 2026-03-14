@@ -3,7 +3,7 @@ kind: Network
 metadata:
   name: example-network
 spec:
-  projectId: 987e6543-e21b-12d3-a456-426655440000
+  zone: zone-1
   name: my-private-network
   cidr: 10.0.0.0/24
   description: "Existing network reference used by VMs"
