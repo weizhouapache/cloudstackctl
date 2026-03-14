@@ -1,11 +1,10 @@
 package cli
 
 import (
-	v1 "cloudstackctl/apis/v1"
-	"cloudstackctl/db"
 	"cloudstackctl/pkg/handlers"
 	"encoding/json"
 	"log"
+	"net/url"
 
 	"github.com/spf13/cobra"
 )
@@ -23,107 +22,30 @@ var describeCmd = &cobra.Command{
 		resourceType := normalizeResourceType(args[0])
 		name := args[1]
 
-		// Describe resource based on type
-		switch resourceType {
-		case "Application":
-			describeApplication(name)
-		case "Component":
-			describeComponent(name)
-		case "VirtualMachine":
-			if standalone {
-				if err := handlers.DescribeVM(name); err != nil {
-					log.Fatalf("Failed to describe network: %v", err)
-				}
-				return
+		// Certain managed kinds are only supported via the controller
+		if standalone {
+			if resourceType == "Application" || resourceType == "Component" || resourceType == "VirtualMachineSpec" {
+				log.Fatalf("'%s' is not supported in standalone mode", resourceType)
 			}
-			describeVM(name)
-		case "Network":
-			if err := handlers.DescribeNetwork(name); err != nil {
-				log.Fatalf("Failed to describe network: %v", err)
+			// Standalone: use local describe wrapper
+			payload := map[string]string{"kind": resourceType, "name": name}
+			raw, _ := json.Marshal(payload)
+			if err := handlers.DescribeCloudStackResource(raw); err != nil {
+				log.Fatalf("Local describe failed: %v", err)
 			}
 			return
-		case "Template":
-			if err := handlers.DescribeTemplate(name); err != nil {
-				log.Fatalf("Failed to describe template: %v", err)
-			}
-			return
-		case "Volume":
-			if err := handlers.DescribeVolume(name); err != nil {
-				log.Fatalf("Failed to describe volume: %v", err)
-			}
-			return
-		case "SSHKey":
-			if err := handlers.DescribeSSHKey(name); err != nil {
-				log.Fatalf("Failed to describe ssh key: %v", err)
-			}
-			return
-		case "UserData":
-			if err := handlers.DescribeUserData(name); err != nil {
-				log.Fatalf("Failed to describe userdata: %v", err)
-			}
-			return
-		case "SecurityGroup":
-			if err := handlers.DescribeSecurityGroup(name); err != nil {
-				log.Fatalf("Failed to describe security group: %v", err)
-			}
-			return
-		case "AffinityGroup":
-			if err := handlers.DescribeAffinityGroup(name); err != nil {
-				log.Fatalf("Failed to describe affinity group: %v", err)
-			}
-			return
-		default:
-			log.Fatalf("Unsupported resource type: %s", resourceType)
 		}
+
+		// Cluster mode: query controller describe endpoint
+		path := "/describe?kind=" + url.QueryEscape(resourceType) + "&name=" + url.QueryEscape(name)
+		body, err := ControllerRequest("GET", path, nil)
+		if err != nil {
+			log.Fatalf("Failed to query controller: %v", err)
+		}
+		println(string(body))
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(describeCmd)
-}
-
-// describeApplication shows detailed info about an Application
-func describeApplication(name string) {
-	var app v1.Application
-	if err := db.DB.Where("metadata_name = ?", name).First(&app).Error; err != nil {
-		log.Fatalf("Application %s not found: %v", name, err)
-	}
-
-	// Pretty print as JSON
-	data, err := json.MarshalIndent(app, "", "  ")
-	if err != nil {
-		log.Fatalf("Failed to format application data: %v", err)
-	}
-
-	log.Println(string(data))
-}
-
-// describeComponent shows detailed info about a Component
-func describeComponent(name string) {
-	var comp v1.Component
-	if err := db.DB.Where("metadata_name = ?", name).First(&comp).Error; err != nil {
-		log.Fatalf("Component %s not found: %v", name, err)
-	}
-
-	data, err := json.MarshalIndent(comp, "", "  ")
-	if err != nil {
-		log.Fatalf("Failed to format component data: %v", err)
-	}
-
-	log.Println(string(data))
-}
-
-// describeVM shows detailed info about a VirtualMachine
-func describeVM(name string) {
-	var vm v1.VirtualMachine
-	if err := db.DB.Where("metadata_name = ?", name).First(&vm).Error; err != nil {
-		log.Fatalf("VM %s not found: %v", name, err)
-	}
-
-	data, err := json.MarshalIndent(vm, "", "  ")
-	if err != nil {
-		log.Fatalf("Failed to format VM data: %v", err)
-	}
-
-	log.Println(string(data))
 }
