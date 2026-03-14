@@ -11,9 +11,10 @@ import (
 
 // describeCmd represents the describe command
 var describeCmd = &cobra.Command{
-	Use:   "describe <resource-type> <name>",
-	Short: "Show detailed information about a resource",
-	Long:  `Show detailed information about a CloudStack resource managed by cloudstackctl`,
+	Use:     "describe <resource-type> <name>",
+	Aliases: []string{"desc"},
+	Short:   "Show detailed information about a resource",
+	Long:    `Show detailed information about a CloudStack resource managed by cloudstackctl`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 2 {
 			log.Fatal("Usage: cloudstackctl describe <resource-type> <name>")
