@@ -9,6 +9,8 @@ import (
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
+
+	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 )
 
 // ListVolumes prints a table of volumes.
@@ -153,4 +155,83 @@ func ResolveVolume(name string) (string, error) {
 		return "", fmt.Errorf("volume %s not found", name)
 	}
 	return resp.Volumes[0].Id, nil
+}
+
+// PrepareVolumesForDeploy inspects the provided volume specs and adjusts
+// DeployVirtualMachineParams accordingly. It will create root volumes when
+// necessary and set the appropriate deploy params (`volumeid` or
+// `diskofferingid`). Data disks are translated into datadiskofferinglist and
+// datadisksdetails so CloudStack will create them at deploy time.
+func PrepareVolumesForDeploy(client *cs.CloudStackClient, params *cs.DeployVirtualMachineParams, vols []v1.VolumeSpec) error {
+	if client == nil || params == nil {
+		return nil
+	}
+	dataIdx := 1
+	datadisksDetails := []map[string]string{}
+
+	for _, vol := range vols {
+		typ := vol.Type
+		if typ == "" {
+			typ = "data"
+		}
+
+		if typ == "root" {
+			// If an existing volume ID provided, use it as the root volume
+			if vol.ID != "" {
+				vid := vol.ID
+				if !IsUUID(vid) {
+					if rid, err := ResolveVolume(vid); err == nil {
+						vid = rid
+					}
+				}
+				params.SetVolumeid(vid)
+				// continue to allow data disks to be processed
+				continue
+			}
+
+			// If size provided, ask deploy to set root disk size
+			if vol.SizeGB > 0 {
+				params.SetRootdisksize(int64(vol.SizeGB))
+			}
+
+			// If disk offering provided, prefer override root disk offering
+			if vol.DiskOffering != "" {
+				do := vol.DiskOffering
+				if did, derr := ResolveDiskOffering(vol.DiskOffering); derr == nil {
+					do = did
+				}
+				params.SetOverridediskofferingid(do)
+			}
+
+			continue
+		}
+
+		// Data disk handling: if ID provided, we will attach post-deploy; if a disk offering
+		// is provided, instruct deploy to create data disk(s) via datadiskofferinglist
+		if vol.ID != "" {
+			// existing volume will be attached post-deploy by caller
+			continue
+		}
+		if vol.DiskOffering != "" {
+			do := vol.DiskOffering
+			if did, derr := ResolveDiskOffering(vol.DiskOffering); derr == nil {
+				do = did
+			}
+			diskDetail := map[string]string{
+				"deviceid":       fmt.Sprintf("%d", dataIdx),
+				"diskofferingid": do,
+			}
+			if vol.SizeGB > 0 {
+				diskDetail["size"] = fmt.Sprintf("%d", vol.SizeGB)
+			}
+			datadisksDetails = append(datadisksDetails, diskDetail)
+			dataIdx++
+		}
+	}
+
+	if len(datadisksDetails) > 0 {
+		params.SetDatadisksdetails(datadisksDetails)
+	}
+
+	return nil
 }

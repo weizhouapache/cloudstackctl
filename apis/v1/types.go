@@ -162,11 +162,14 @@ type Volume struct {
 
 // VolumeSpec defines the desired state of a Volume
 type VolumeSpec struct {
-	Zone         string `yaml:"zone"`                // CloudStack zone ID or name
-	DiskOffering string `yaml:"diskOffering"`        // Disk offering type (HDD/SSD)
-	SizeGB       int    `yaml:"size" gorm:"size_gb"` // Disk size in GB
-	ID           string `yaml:"id,omitempty" gorm:"column:volume_id"`
-	Name         string `yaml:"name,omitempty"`
+	Zone         string `json:"zone,omitempty" yaml:"zone"`                 // CloudStack zone ID or name
+	DiskOffering string `json:"diskOffering,omitempty" yaml:"diskOffering"` // Disk offering type (HDD/SSD)
+	SizeGB       int    `json:"size,omitempty" yaml:"size" gorm:"size_gb"`  // Disk size in GB
+	ID           string `json:"id,omitempty" yaml:"id,omitempty" gorm:"column:volume_id"`
+	Name         string `json:"name,omitempty" yaml:"name,omitempty"`
+	// Type indicates whether this volume is a root or data disk. Valid values:
+	// "root" or "data" (default: "data").
+	Type string `json:"type,omitempty" yaml:"type,omitempty"`
 }
 
 // SSHKey represents an SSH key pair for VM access in CloudStack

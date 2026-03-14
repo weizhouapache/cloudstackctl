@@ -13,6 +13,7 @@ spec:
       - platform-admin
     volumes:
       - name: data-disk
+        type: data
         diskOffering: standard-hdd
         size: 50
   healthChecks:

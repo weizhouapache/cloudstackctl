@@ -8,6 +8,7 @@ import (
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/db"
+	"cloudstackctl/pkg/handlers"
 )
 
 // ReconcileAll runs reconciliation for all resources
@@ -258,7 +259,7 @@ func (c *Controller) createComponentVMs(comp *v1.Component, compRef v1.Component
 			return err
 		}
 
-		if err := c.createVM(vm); err != nil {
+		if err := handlers.ApplyVirtualMachineManaged(vm, true); err != nil {
 			return err
 		}
 	}

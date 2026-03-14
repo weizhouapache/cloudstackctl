@@ -167,10 +167,29 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) error {
 	if len(vm.Spec.SSHKeys) > 0 {
 		params.SetKeypairs(vm.Spec.SSHKeys)
 	}
+	// Apply security groups if provided: resolve names to IDs and set them.
+	if len(vm.Spec.SecurityGroups) > 0 {
+		sgIDs := []string{}
+		for _, s := range vm.Spec.SecurityGroups {
+			id, serr := ResolveSecurityGroup(s)
+			if serr != nil {
+				return fmt.Errorf("failed to resolve security group %s: %w", s, serr)
+			}
+			sgIDs = append(sgIDs, id)
+		}
+		params.SetSecuritygroupids(sgIDs)
+	}
 	// If parameters are provided, pass them as the CloudStack 'details' map
 	// first (supported by the SDK).
 	if vm.Spec.Parameters != nil {
 		params.SetDetails(vm.Spec.Parameters)
+	}
+
+	// Prepare root volume or disk offering on deploy
+	if len(vm.Spec.Volumes) > 0 {
+		if err := PrepareVolumesForDeploy(client, params, vm.Spec.Volumes); err != nil {
+			return fmt.Errorf("failed to prepare volumes for deploy: %w", err)
+		}
 	}
 
 	resp, err := client.VirtualMachine.DeployVirtualMachine(params)

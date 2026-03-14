@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/apache/cloudstack-go/v2/cloudstack"
@@ -665,86 +664,4 @@ func (c *Controller) applyAffinityGroup(ag *v1.AffinityGroup) error {
 // applyUserData creates/updates a UserData resource
 func (c *Controller) applyUserData(ud *v1.UserData) error {
 	return db.DB.Save(ud).Error
-}
-
-// createVM creates a VM in CloudStack using the SDK
-func (c *Controller) createVM(vm *v1.VirtualMachine) error {
-	log.Printf("Creating VM: %s", vm.Metadata.Name)
-
-	// Create VM parameters (use DeployVirtualMachine in SDK)
-	params := c.csClient.VirtualMachine.NewDeployVirtualMachineParams(
-		vm.Spec.ServiceOffering,
-		vm.Spec.Template,
-		"",
-	)
-	params.SetName(vm.Metadata.Name)
-	// Accept project name or ID
-	if vm.Spec.Project != "" {
-		if pid, perr := handlers.ResolveProject(vm.Spec.Project); perr == nil {
-			params.SetProjectid(pid)
-		} else {
-			params.SetProjectid(vm.Spec.Project)
-		}
-	}
-	if len(vm.Spec.NetworkIDs) > 0 {
-		params.SetNetworkids(vm.Spec.NetworkIDs)
-	}
-
-	// Add SSH key
-	if len(vm.Spec.SSHKeys) > 0 {
-		params.SetKeypair(vm.Spec.SSHKeys[0])
-	}
-
-	// Apply optional deploy parameters from the VM spec where possible.
-	// This attempts to call SDK setter methods (e.g., SetBootMode) if they exist.
-	if vm.Spec.Parameters != nil {
-		pv := reflect.ValueOf(params)
-		for k, v := range vm.Spec.Parameters {
-			parts := strings.FieldsFunc(k, func(r rune) bool { return r == '_' || r == '-' || r == ' ' })
-			for i := range parts {
-				parts[i] = strings.Title(parts[i])
-			}
-			camel := strings.Join(parts, "")
-			candidates := []string{"Set" + camel, "Set" + strings.Title(k)}
-			applied := false
-			for _, m := range candidates {
-				meth := pv.MethodByName(m)
-				if meth.IsValid() && meth.Type().NumIn() == 1 && meth.Type().In(0).Kind() == reflect.String {
-					meth.Call([]reflect.Value{reflect.ValueOf(v)})
-					applied = true
-					break
-				}
-			}
-			if !applied {
-				log.Printf("info: VM parameter '%s' not applied (no SDK setter found)", k)
-			}
-		}
-	}
-
-	// Tagging is handled after deployment via the Resourcetags service below.
-
-	// Execute API call
-	resp, err := c.csClient.VirtualMachine.DeployVirtualMachine(params)
-	if err != nil {
-		log.Printf("Failed to create VM %s: %v", vm.Metadata.Name, err)
-		vm.Status.ObservedState = "Failed"
-		db.DB.Save(vm)
-		return err
-	}
-
-	// Update VM status
-	vm.Status.CloudStackID = resp.Id
-	vm.Status.ObservedState = "Creating"
-	vm.Status.LastChecked = time.Now()
-
-	// Add a resource tag indicating this VM is managed by cloudstackctl.
-	// Use the resource type 'UserVm' for virtual machines.
-	tags := map[string]string{"managed_by": "cloudstackctl"}
-	if params := c.csClient.Resourcetags.NewCreateTagsParams([]string{resp.Id}, "UserVm", tags); params != nil {
-		if _, err := c.csClient.Resourcetags.CreateTags(params); err != nil {
-			log.Printf("Warning: failed to create tag for VM %s (id=%s): %v", vm.Metadata.Name, resp.Id, err)
-		}
-	}
-
-	return db.DB.Save(vm).Error
 }
