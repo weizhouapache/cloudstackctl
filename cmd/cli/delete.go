@@ -12,7 +12,7 @@ import (
 
 // deleteCmd represents the delete command
 var deleteCmd = &cobra.Command{
-	Use:   "delete <resource-type> <name>",
+	Use:   "delete <resource-type> <name> | delete -f <yaml>",
 	Short: "Delete a CloudStack resource",
 	Long:  `Delete a resource managed by cloudstackctl (Application/Component/VirtualMachine/etc.)`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -73,7 +73,7 @@ var deleteCmd = &cobra.Command{
 			log.Fatal("Usage: cloudstackctl delete <resource-type> <name>")
 		}
 
-		resourceType = args[0]
+		resourceType = normalizeResourceType(args[0])
 		name = args[1]
 
 		payload := map[string]string{"kind": resourceType, "name": name}
