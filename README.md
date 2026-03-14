@@ -118,6 +118,7 @@ kind: VirtualMachineSpec
 metadata:
   name: basic-vm-spec
 spec:
+  zone: zone-1
   template: ubuntu-22.04
   serviceOffering: medium
   networkIds:
@@ -138,10 +139,12 @@ kind: Application
 metadata:
   name: app-with-reused-vmspec
 spec:
-  project: 987e6543-e21b-12d3-a456-426655440000
+  project: project-2
   components:
     - name: frontend
       virtualMachineSpec: basic-vm-spec
+      overrides:
+        - sshKeys: web
       replicas: 2
       healthChecks:
         - type: ping
@@ -157,7 +160,7 @@ kind: Application
 metadata:
   name: simple-app
 spec:
-  project: 987e6543-e21b-12d3-a456-426655440000
+  project: project-2
   components:
     - name: frontend
       virtualMachineSpec: basic-vm-spec
@@ -175,7 +178,8 @@ kind: VirtualMachine
 metadata:
   name: standalone-vm
 spec:
-  project: 987e6543-e21b-12d3-a456-426655440000
+  zone: zone-1
+  project: project-2
   template: ubuntu-22.04
   serviceOffering: medium
   networkIds:

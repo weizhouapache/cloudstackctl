@@ -1,0 +1,14 @@
+apiVersion: cloudstackctl/v1
+kind: Network
+metadata:
+  name: example-network-shared
+spec:
+  zone: zone-1
+  networkOffering: shared-network-offering
+  description: "Shared network example with static IP range"
+  vlan: 1000
+  startIp: 10.0.0.10
+  endIp: 10.0.0.100
+  gateway: 10.0.0.1
+  netmask: 255.255.255.0
+  bypassVlanOverlapCheck: true

@@ -1,0 +1,9 @@
+apiVersion: cloudstackctl/v1
+kind: Network
+metadata:
+  name: example-network-isolated
+spec:
+  zone: zone-1
+  networkOffering: isolated-network-offering
+  cidr: 10.0.0.0/24
+  description: "Isolated network example used by standalone VMs"

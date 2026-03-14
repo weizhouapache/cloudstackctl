@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
@@ -49,7 +51,7 @@ func ListNetworks(name string) error {
 		return fmt.Errorf("cloudstack API error: %w", err)
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tID\tZONE\tDISPLAY TEXT\tTYPE\tSTATE")
+	fmt.Fprintln(w, "NAME\tID\tZONE\tVLAN\tDISPLAY TEXT\tTYPE\tSTATE")
 	for _, n := range resp.Networks {
 		display := n.Displaytext
 		if display == "" {
@@ -66,7 +68,21 @@ func ListNetworks(name string) error {
 			}
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", n.Name, n.Id, zoneName, display, n.Type, n.State)
+		// Attempt to extract VLAN information from the returned network object
+		// via JSON to avoid SDK field name differences across versions.
+		vlan := ""
+		if b, merr := json.Marshal(n); merr == nil {
+			var m map[string]interface{}
+			if uerr := json.Unmarshal(b, &m); uerr == nil {
+				if v, ok := m["vlan"].(string); ok {
+					vlan = v
+				} else if v, ok := m["vlanid"].(string); ok {
+					vlan = v
+				}
+			}
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", n.Name, n.Id, zoneName, vlan, display, n.Type, n.State)
 	}
 	w.Flush()
 	return nil
@@ -150,9 +166,59 @@ func ApplyNetwork(netRes *v1.Network) error {
 		if zerr != nil {
 			return fmt.Errorf("failed to resolve zone %s: %w", netRes.Spec.Zone, zerr)
 		}
-		createParams := client.Network.NewCreateNetworkParams(name, netRes.Spec.NetworkOffering, zoneID)
+		// Resolve network offering name to ID; require resolution.
+		offeringID, offErr := ResolveNetworkOffering(netRes.Spec.NetworkOffering)
+		if offErr != nil {
+			return fmt.Errorf("failed to resolve network offering %s: %w", netRes.Spec.NetworkOffering, offErr)
+		}
+		createParams := client.Network.NewCreateNetworkParams(name, offeringID, zoneID)
 		if netRes.Spec.Description != "" {
 			createParams.SetDisplaytext(netRes.Spec.Description)
+		}
+
+		// Pass bypassvlanoverlapcheck through to CloudStack (supported by API)
+		createParams.SetBypassvlanoverlapcheck(netRes.Spec.BypassVlanOverlapCheck)
+
+		// If shared network fields are present, set them on the create params.
+		if netRes.Spec.Gateway != "" {
+			createParams.SetGateway(netRes.Spec.Gateway)
+		}
+		if netRes.Spec.Netmask != "" {
+			createParams.SetNetmask(netRes.Spec.Netmask)
+		}
+		if netRes.Spec.StartIP != "" {
+			createParams.SetStartip(netRes.Spec.StartIP)
+		}
+		if netRes.Spec.EndIP != "" {
+			createParams.SetEndip(netRes.Spec.EndIP)
+		}
+		if netRes.Spec.Vlan != nil {
+			var vlanVal string
+			switch v := netRes.Spec.Vlan.(type) {
+			case string:
+				vlanVal = v
+			case int:
+				vlanVal = strconv.Itoa(v)
+			case int64:
+				vlanVal = strconv.FormatInt(v, 10)
+			case float64:
+				// YAML numbers may be decoded as float64
+				vlanVal = strconv.FormatInt(int64(v), 10)
+			default:
+				vlanVal = fmt.Sprintf("%v", v)
+			}
+			// Accept numeric VLANs like "1000" or the full URI "vlan://1000".
+			// If the value already contains a scheme ("://"), trust it
+			// (supports vlan://, vxlan://, etc.). Only numeric values
+			// without a scheme get prefixed with "vlan://".
+			if vlanVal != "" {
+				if !strings.Contains(vlanVal, "://") {
+					if _, err := strconv.Atoi(vlanVal); err == nil {
+						vlanVal = "vlan://" + vlanVal
+					}
+				}
+				createParams.SetVlan(vlanVal)
+			}
 		}
 		resp, err := client.Network.CreateNetwork(createParams)
 		if err != nil {

@@ -90,6 +90,7 @@ func ResolveTemplate(name string) (string, error) {
 	}
 	params := client.Template.NewListTemplatesParams("")
 	params.SetName(name)
+	params.SetTemplatefilter("all") // Search all templates (not just "featured" or "self") to allow resolving by name regardless of ownership or featured status.
 	resp, err := client.Template.ListTemplates(params)
 	if err != nil {
 		return "", fmt.Errorf("cloudstack API error: %w", err)

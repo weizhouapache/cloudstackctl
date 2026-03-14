@@ -40,10 +40,14 @@ func DeleteCloudStackResource(raw []byte) error {
 		return DeleteSSHKey(name)
 	case "SecurityGroup":
 		return DeleteSecurityGroup(name)
+	case "AffinityGroup":
+		return DeleteAffinityGroup(name)
 	case "Template":
 		return DeleteTemplate(name)
 	case "Snapshot":
 		return DeleteSnapshot(name)
+	case "UserData":
+		return DeleteUserData(name)
 	default:
 		return fmt.Errorf("unsupported resource kind for standalone delete: %s", kind)
 	}

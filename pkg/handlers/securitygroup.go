@@ -84,9 +84,6 @@ func ApplySecurityGroup(sg *v1.SecurityGroup) error {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	existing, _, err := client.SecurityGroup.GetSecurityGroupByName(sg.Metadata.Name)
-	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
-	}
 	if existing != nil {
 		return fmt.Errorf("securitygroup %s already exists in CloudStack (id=%s); updates are not supported", sg.Metadata.Name, existing.Id)
 	}

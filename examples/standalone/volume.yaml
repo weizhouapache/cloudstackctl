@@ -3,7 +3,6 @@ kind: Volume
 metadata:
   name: data-disk
 spec:
-  name: data-disk
   diskOffering: standard-hdd
   size: 50
   zone: zone-1

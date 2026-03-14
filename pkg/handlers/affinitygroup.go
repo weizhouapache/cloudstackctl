@@ -105,3 +105,25 @@ func ResolveAffinityGroup(name string) (string, error) {
 	}
 	return existing.Id, nil
 }
+
+// DeleteAffinityGroup deletes an affinity group by name.
+func DeleteAffinityGroup(name string) error {
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	existing, _, err := client.AffinityGroup.GetAffinityGroupByName(name)
+	if err != nil {
+		return fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if existing == nil {
+		return fmt.Errorf("affinity group %s not found", name)
+	}
+	dp := client.AffinityGroup.NewDeleteAffinityGroupParams()
+	dp.SetId(existing.Id)
+	if _, err := client.AffinityGroup.DeleteAffinityGroup(dp); err != nil {
+		return fmt.Errorf("failed to delete affinity group %s: %w", name, err)
+	}
+	log.Printf("AffinityGroup %s deleted from CloudStack (id=%s)", name, existing.Id)
+	return nil
+}

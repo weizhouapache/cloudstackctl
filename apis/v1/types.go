@@ -139,13 +139,15 @@ type Network struct {
 
 // NetworkSpec defines the desired state of a Network
 type NetworkSpec struct {
-	Zone            string `yaml:"zone"`                      // CloudStack zone ID or name
-	NetworkOffering string `yaml:"networkOffering,omitempty"` // Network offering ID or name for creation
-	Description     string `yaml:"description,omitempty"`     // Human-friendly description / displayText
-	Gateway         string `yaml:"gateway,omitempty"`         // Gateway IP for shared networks
-	Netmask         string `yaml:"netmask,omitempty"`         // Netmask for shared networks
-	StartIP         string `yaml:"startIp,omitempty"`         // Start IP for static IP range (shared network)
-	EndIP           string `yaml:"endIp,omitempty"`           // End IP for static IP range (shared network)
+	Zone                   string      `yaml:"zone"`                             // CloudStack zone ID or name
+	NetworkOffering        string      `yaml:"networkOffering,omitempty"`        // Network offering ID or name for creation
+	Vlan                   interface{} `yaml:"vlan,omitempty"`                   // Optional VLAN tag for shared networks; may be string or number
+	BypassVlanOverlapCheck bool        `yaml:"bypassVlanOverlapCheck,omitempty"` // When true, do not normalize or validate VLAN value
+	Description            string      `yaml:"description,omitempty"`            // Human-friendly description / displayText
+	Gateway                string      `yaml:"gateway,omitempty"`                // Gateway IP for shared networks
+	Netmask                string      `yaml:"netmask,omitempty"`                // Netmask for shared networks
+	StartIP                string      `yaml:"startIp,omitempty"`                // Start IP for static IP range (shared network)
+	EndIP                  string      `yaml:"endIp,omitempty"`                  // End IP for static IP range (shared network)
 }
 
 // Volume represents a disk attached to a VM in CloudStack
@@ -170,10 +172,16 @@ type VolumeSpec struct {
 // SSHKey represents an SSH key pair for VM access in CloudStack
 type SSHKey struct {
 	gorm.Model
-	APIVersion string   `json:"apiVersion" yaml:"apiVersion"`
-	Kind       string   `json:"kind" yaml:"kind"` // "SSHKey"
-	Metadata   Metadata `json:"metadata" yaml:"metadata" gorm:"embedded"`
-	Status     Status   `json:"status,omitempty" gorm:"embedded"`
+	APIVersion string     `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string     `json:"kind" yaml:"kind"` // "SSHKey"
+	Metadata   Metadata   `json:"metadata" yaml:"metadata" gorm:"embedded"`
+	Spec       SSHKeySpec `json:"spec,omitempty" yaml:"spec,omitempty" gorm:"embedded"`
+	Status     Status     `json:"status,omitempty" gorm:"embedded"`
+}
+
+// SSHKeySpec holds the public key material for registering an SSH keypair
+type SSHKeySpec struct {
+	PublicKey string `yaml:"publicKey"`
 }
 
 // SecurityGroup represents a firewall rule set for VMs in CloudStack

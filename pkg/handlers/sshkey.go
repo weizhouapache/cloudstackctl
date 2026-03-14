@@ -89,19 +89,32 @@ func ApplySSHKey(key *v1.SSHKey) error {
 	if err != nil {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
-	params := client.SSH.NewListSSHKeyPairsParams()
-	resp, err := client.SSH.ListSSHKeyPairs(params)
+	if key.Metadata.Name == "" {
+		return fmt.Errorf("sshkey metadata.name is required")
+	}
+
+	// Check if key already exists by name
+	listParams := client.SSH.NewListSSHKeyPairsParams()
+	listParams.SetName(key.Metadata.Name)
+	resp, err := client.SSH.ListSSHKeyPairs(listParams)
 	if err != nil {
 		return fmt.Errorf("cloudstack API error: %w", err)
 	}
-	if resp != nil {
-		for _, k := range resp.SSHKeyPairs {
-			if k.Name == key.Metadata.Name {
-				return fmt.Errorf("sshkey %s already exists in CloudStack; updates are not supported", key.Metadata.Name)
-			}
-		}
+	if resp != nil && len(resp.SSHKeyPairs) > 0 {
+		return fmt.Errorf("sshkey %s already exists in CloudStack (fingerprint=%s); updates are not supported", key.Metadata.Name, resp.SSHKeyPairs[0].Fingerprint)
 	}
-	return fmt.Errorf("creating or registering SSHKey from controller is not implemented; use CLI standalone to register a keypair")
+
+	// Register the provided public key
+	if key.Spec.PublicKey == "" {
+		return fmt.Errorf("sshkey spec.publicKey is required to register a new key")
+	}
+
+	regParams := client.SSH.NewRegisterSSHKeyPairParams(key.Metadata.Name, key.Spec.PublicKey)
+	if _, err := client.SSH.RegisterSSHKeyPair(regParams); err != nil {
+		return fmt.Errorf("failed to register ssh key %s: %w", key.Metadata.Name, err)
+	}
+	log.Printf("Registered SSHKey %s", key.Metadata.Name)
+	return nil
 }
 
 // ResolveSSHKey returns the SSH keypair name if present in CloudStack.

@@ -115,10 +115,17 @@ func ApplyVolume(vol *v1.Volume) error {
 			}
 			cp.SetZoneid(zid)
 		}
-		if _, err := client.Volume.CreateVolume(cp); err != nil {
+		resp, err := client.Volume.CreateVolume(cp)
+		if err != nil {
 			return fmt.Errorf("failed to create volume: %w", err)
 		}
-		log.Printf("Requested creation of Volume %s", vol.Metadata.Name)
+		if resp != nil {
+			msg := fmt.Sprintf("Volume \"%s\" (ID: %s) has been created", vol.Metadata.Name, resp.Id)
+			log.Println(msg)
+			fmt.Println(msg)
+		} else {
+			log.Printf("Requested creation of Volume %s", vol.Metadata.Name)
+		}
 		return nil
 	}
 

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -23,27 +24,21 @@ func ApplyUserData(ud *v1.UserData) error {
 	if err != nil {
 		return fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
-
-	// Find VM by name
-	params := client.VirtualMachine.NewListVirtualMachinesParams()
-	params.SetName(ud.Metadata.Name)
-	resp, err := client.VirtualMachine.ListVirtualMachines(params)
+	// Register UserData in CloudStack as a standalone UserData entry.
+	// Use the SDK register/create method; CloudStack expects the content
+	// to be provided as a string.
+	// CloudStack expects userdata to be base64-encoded; encode before sending.
+	encoded := base64.StdEncoding.EncodeToString([]byte(ud.Spec.Script))
+	regParams := client.User.NewRegisterUserDataParams(ud.Metadata.Name, encoded)
+	resp, err := client.User.RegisterUserData(regParams)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return fmt.Errorf("failed to register userdata %s: %w", ud.Metadata.Name, err)
 	}
-	if resp == nil || len(resp.VirtualMachines) == 0 {
-		return fmt.Errorf("no VM found with name %s", ud.Metadata.Name)
+	if resp != nil {
+		fmt.Printf("UserData %s registered (id=%s)\n", ud.Metadata.Name, resp.Id)
+	} else {
+		fmt.Printf("UserData %s registered\n", ud.Metadata.Name)
 	}
-	vm := resp.VirtualMachines[0]
-
-	// Reset user data for the found VM (CloudStack expects VM to be stopped).
-	rp := client.VirtualMachine.NewResetUserDataForVirtualMachineParams(vm.Id)
-	rp.SetUserdata(ud.Spec.Script)
-	if _, err := client.VirtualMachine.ResetUserDataForVirtualMachine(rp); err != nil {
-		return fmt.Errorf("failed to reset userdata for VM %s (id=%s): %w", ud.Metadata.Name, vm.Id, err)
-	}
-
-	fmt.Printf("UserData applied to VM %s (id=%s)\n", ud.Metadata.Name, vm.Id)
 	return nil
 }
 
@@ -115,4 +110,28 @@ func ResolveUserData(name string) (string, error) {
 		return "", fmt.Errorf("userdata %s not found", name)
 	}
 	return resp.UserData[0].Id, nil
+}
+
+// DeleteUserData deletes a UserData entry by name.
+func DeleteUserData(name string) error {
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	params := client.User.NewListUserDataParams()
+	params.SetName(name)
+	resp, err := client.User.ListUserData(params)
+	if err != nil {
+		return fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if resp == nil || len(resp.UserData) == 0 {
+		return fmt.Errorf("userdata %s not found", name)
+	}
+	id := resp.UserData[0].Id
+	dp := client.User.NewDeleteUserDataParams(id)
+	if _, err := client.User.DeleteUserData(dp); err != nil {
+		return fmt.Errorf("failed to delete userdata %s: %w", name, err)
+	}
+	fmt.Printf("UserData %s deleted from CloudStack (id=%s)\n", name, id)
+	return nil
 }

@@ -76,6 +76,29 @@ func ResolveDiskOffering(name string) (string, error) {
 	return resp.DiskOfferings[0].Id, nil
 }
 
+// ResolveNetworkOffering returns the network offering ID for a given name.
+func ResolveNetworkOffering(name string) (string, error) {
+	// If the value looks like a UUID, treat it as an ID and return it.
+	if IsUUID(name) {
+		return name, nil
+	}
+
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
+	params := client.NetworkOffering.NewListNetworkOfferingsParams()
+	params.SetName(name)
+	resp, err := client.NetworkOffering.ListNetworkOfferings(params)
+	if err != nil {
+		return "", fmt.Errorf("cloudstack API error: %w", err)
+	}
+	if resp == nil || len(resp.NetworkOfferings) == 0 {
+		return "", fmt.Errorf("network offering %s not found", name)
+	}
+	return resp.NetworkOfferings[0].Id, nil
+}
+
 // ResolveProject returns the CloudStack project ID for a given project name.
 func ResolveProject(name string) (string, error) {
 	// If the value looks like a UUID, treat it as an ID and return it.

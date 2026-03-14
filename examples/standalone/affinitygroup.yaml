@@ -3,6 +3,6 @@ kind: AffinityGroup
 metadata:
   name: vm-spread
 spec:
-  type: hostAntiAffinity
+  type: host anti-affinity
   name: vm-spread
   description: Spread VMs across hosts

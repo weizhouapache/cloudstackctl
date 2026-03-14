@@ -1,9 +1,0 @@
-apiVersion: cloudstackctl/v1
-kind: Network
-metadata:
-  name: example-network
-spec:
-  zone: zone-1
-  name: my-private-network
-  cidr: 10.0.0.0/24
-  description: "Existing network reference used by VMs"
