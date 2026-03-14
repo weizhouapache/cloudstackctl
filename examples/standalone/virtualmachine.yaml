@@ -13,15 +13,11 @@ spec:
   volumes:
     - name: data-disk
       diskOffering: standard-hdd
-      size: 50GB
+      size: 50
   affinityGroups:
-    - type: hostAntiAffinity
-      name: vm-spread
+    - vm-spread
   securityGroups:
     - default-sec
-  parameters:
-    bootMode: SECURE
-    bootType: UEFI
   healthChecks:
     - type: ping
       interval: 10s

@@ -1,0 +1,7 @@
+apiVersion: cloudstackctl/v1
+kind: VirtualMachine
+metadata:
+  name: example-vm-cluster
+spec:
+  virtualMachineSpec: frontend-vmspec
+  projectId: ""

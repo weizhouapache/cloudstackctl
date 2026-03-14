@@ -43,9 +43,19 @@ type ApplicationSpec struct {
 
 // ComponentRef references a Component within an Application
 type ComponentRef struct {
-	Name               string `yaml:"name"`               // Component name
-	VirtualMachineSpec string `yaml:"virtualMachineSpec"` // Reusable VM spec name
-	Replicas           int    `yaml:"replicas"`           // Number of VM replicas
+	Name               string        `yaml:"name"`               // Component name
+	VirtualMachineSpec string        `yaml:"virtualMachineSpec"` // Reusable VM spec name
+	Replicas           int           `yaml:"replicas"`           // Number of VM replicas
+	HealthChecks       []HealthCheck `yaml:"healthChecks,omitempty" gorm:"serializer:json"`
+}
+
+// HealthCheck defines a simple health check configuration for VMs
+type HealthCheck struct {
+	Type     string `yaml:"type"`               // e.g. ping, http
+	Interval string `yaml:"interval,omitempty"` // e.g. 10s
+	Timeout  string `yaml:"timeout,omitempty"`  // e.g. 5s
+	Path     string `yaml:"path,omitempty"`     // HTTP path for http checks
+	Port     int    `yaml:"port,omitempty"`     // Optional port for TCP/HTTP checks
 }
 
 // Component represents a set of VMs for a specific role (e.g. frontend/backend)
@@ -67,6 +77,7 @@ type ComponentSpec struct {
 	VirtualMachineSpec string             `yaml:"virtualMachineSpec"` // Reusable VM spec name
 	Replicas           int                `yaml:"replicas"`           // Number of VM replicas
 	Overrides          ComponentOverrides `yaml:"overrides,omitempty" gorm:"serializer:json"`
+	HealthChecks       []HealthCheck      `yaml:"healthChecks,omitempty" gorm:"serializer:json"`
 }
 
 // ComponentOverrides allows limited, safe overrides to a reused VM spec
@@ -91,15 +102,16 @@ type VirtualMachine struct {
 
 // VirtualMachineSpec defines reusable VM configuration (template/offering/network)
 type VirtualMachineSpec struct {
-	ProjectID       string       `yaml:"projectId"`                                     // CloudStack project ID
-	Template        string       `yaml:"template"`                                      // VM template name/ID
-	ServiceOffering string       `yaml:"serviceOffering"`                               // VM service offering (size)
-	NetworkIDs      []string     `yaml:"networkIds" gorm:"serializer:json"`             // Attached networks
-	SSHKeys         []string     `yaml:"sshKeys" gorm:"serializer:json"`                // SSH keys for access
-	SecurityGroups  []string     `yaml:"securityGroups" gorm:"serializer:json"`         // Firewall groups
-	AffinityGroups  []string     `yaml:"affinityGroups" gorm:"serializer:json"`         // Host/VM affinity rules
-	UserDataRefs    []string     `yaml:"userDataRefs,omitempty" gorm:"serializer:json"` // Optional references to UserData resources
-	Volumes         []VolumeSpec `yaml:"volumes,omitempty" gorm:"serializer:json"`      // Desired or observed attached volumes
+	ProjectID       string        `yaml:"projectId"`                                     // CloudStack project ID
+	Template        string        `yaml:"template"`                                      // VM template name/ID
+	ServiceOffering string        `yaml:"serviceOffering"`                               // VM service offering (size)
+	NetworkIDs      []string      `yaml:"networkIds" gorm:"serializer:json"`             // Attached networks
+	SSHKeys         []string      `yaml:"sshKeys" gorm:"serializer:json"`                // SSH keys for access
+	SecurityGroups  []string      `yaml:"securityGroups" gorm:"serializer:json"`         // Firewall groups
+	AffinityGroups  []string      `yaml:"affinityGroups" gorm:"serializer:json"`         // Host/VM affinity rules
+	UserDataRefs    []string      `yaml:"userDataRefs,omitempty" gorm:"serializer:json"` // Optional references to UserData resources
+	Volumes         []VolumeSpec  `yaml:"volumes,omitempty" gorm:"serializer:json"`      // Desired or observed attached volumes
+	HealthChecks    []HealthCheck `yaml:"healthChecks,omitempty" gorm:"serializer:json"`
 }
 
 // VirtualMachineSpecResource is the persisted wrapper for reusable VM specs
