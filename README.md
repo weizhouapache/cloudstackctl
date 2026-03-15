@@ -8,7 +8,8 @@ For local development configuration see [Development.md](Development.md).
 
 # Architecture Overview
 
-* Single `cloudstackctl` binary provides the CLI and controller runtime.
+* Single `cloudstackctl` binary provides the CLI.
+* Single `cloudstackctl-controller` binary provides the API server and controller runtime.
 * Controller sends async requests to CloudStack API, writes desired & observed state, manages health checks and dependency graph. It exposes a small health endpoint on port `65426` (`/health`).
 * CLI operates locally and uses the CloudStack client to perform direct actions when appropriate; credentials are loaded from a config file (see `-c`) or environment variables (`.env.cloudstack` is used by default if present).
 

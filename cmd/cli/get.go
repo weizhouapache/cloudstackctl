@@ -50,6 +50,9 @@ var getCmd = &cobra.Command{
 		// Cluster mode: forward to controller HTTP API (/list)
 		var endpoint = "/list"
 		q := url.Values{}
+		if getAll && resourceType == "VirtualMachine" {
+			q.Set("all", "true")
+		}
 		q.Set("kind", resourceType)
 		if name != "" {
 			q.Set("name", name)
@@ -61,7 +64,7 @@ var getCmd = &cobra.Command{
 		}
 
 		// If controller returned VM objects from DB, pretty-print them
-		if resourceType == "VirtualMachine" {
+		if resourceType == "VirtualMachine" && !getAll {
 			var vms []v1.VirtualMachine
 			if err := json.Unmarshal(body, &vms); err == nil {
 				handlers.PrintVMsFromDB(vms)
@@ -77,22 +80,25 @@ func init() {
 	rootCmd.AddCommand(getCmd)
 }
 
+var getAll bool
+
+func init() {
+	getCmd.Flags().BoolVarP(&getAll, "all", "A", false, "Show all VMs from CloudStack (include unmanaged) — cluster mode only")
+}
+
 // tryDecodeAndPrint attempts to decode controller JSON into known typed
 // responses and prints them using the shared handlers. Returns true if
 // printing was performed.
 func tryDecodeAndPrint(resourceType string, body []byte) bool {
-	// VMs are returned from the controller DB as []v1.VirtualMachine
-	if resourceType == "VirtualMachine" {
-		var vms []v1.VirtualMachine
-		if err := json.Unmarshal(body, &vms); err == nil {
-			handlers.PrintVMsFromDB(vms)
-			return true
-		}
-	}
-
 	// Try CloudStack SDK response types for unmanaged resources so we can
 	// preserve typed slices (e.g., []*cs.Network) when printing.
 	switch resourceType {
+	case "VirtualMachine":
+		var resp cs.ListVirtualMachinesResponse
+		if err := json.Unmarshal(body, &resp); err == nil {
+			handlers.PrintCloudStackResource(resourceType, &resp)
+			return true
+		}
 	case "Network":
 		var resp cs.ListNetworksResponse
 		if err := json.Unmarshal(body, &resp); err == nil {

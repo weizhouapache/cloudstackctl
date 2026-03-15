@@ -3,7 +3,7 @@ module cloudstackctl
 go 1.26
 
 require (
-	github.com/apache/cloudstack-go/v2 v2.19.1-0.20260314202825-5fe04df62a24
+	github.com/apache/cloudstack-go/v2 v2.19.1-0.20260315154432-66bc95151dde
 	github.com/spf13/cobra v1.10.2
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1

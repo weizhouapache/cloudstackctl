@@ -272,6 +272,27 @@ func (c *Controller) Start() {
 				w.Write(b)
 				return
 			case "VirtualMachine":
+				// If client requested all VMs, delegate to handlers which will
+				// query CloudStack directly. This preserves parity with
+				// standalone mode when `--all` is used in the CLI.
+				if r.URL.Query().Get("all") == "true" {
+					payload := map[string]string{"kind": "VirtualMachine"}
+					if name != "" {
+						payload["name"] = name
+					}
+					raw, _ := json.Marshal(payload)
+					obj, err := handlers.GetCloudStackResource(raw)
+					if err != nil {
+						http.Error(w, fmt.Sprintf("failed to list VirtualMachine: %v", err), http.StatusInternalServerError)
+						return
+					}
+					b, _ := json.Marshal(obj)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					w.Write(b)
+					return
+				}
+
 				var vms []v1.VirtualMachine
 				if db.DB == nil {
 					http.Error(w, "database unavailable", http.StatusServiceUnavailable)
