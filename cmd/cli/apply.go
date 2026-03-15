@@ -55,7 +55,7 @@ var applyCmd = &cobra.Command{
 			return
 		}
 
-		// cluster mode: apply by POSTing to controller HTTP API
+		// controller mode: apply by POSTing to controller HTTP API
 		body, err := ControllerRequest("POST", "/apply", jsonData)
 		if err != nil {
 			log.Fatalf("Failed to POST to controller: %v", err)

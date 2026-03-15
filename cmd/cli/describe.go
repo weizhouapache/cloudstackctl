@@ -84,5 +84,5 @@ func init() {
 var describeAll bool
 
 func init() {
-	describeCmd.Flags().BoolVarP(&describeAll, "all", "A", false, "Describe a VM from CloudStack (cluster mode only)")
+	describeCmd.Flags().BoolVarP(&describeAll, "all", "A", false, "Describe a VM from CloudStack (controller mode only)")
 }

@@ -107,7 +107,7 @@ func DeleteVM(name string) {
 	log.Printf("VM %s deleted successfully", name)
 }
 
-// DeleteNetwork deletes a Network resource (handles standalone and cluster modes)
+// DeleteNetwork deletes a Network resource (handles standalone and controller modes)
 func DeleteNetwork(name string) {
 	if db.DB == nil {
 		// standalone or DB not initialized: try CloudStack directly

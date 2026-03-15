@@ -53,7 +53,7 @@ func (c *Controller) Start() {
 			w.Write([]byte("ok"))
 		})
 
-		// Accept resource apply requests from the CLI in cluster mode
+		// Accept resource apply requests from the CLI in controller mode
 		http.HandleFunc("/apply", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -256,6 +256,33 @@ func (c *Controller) Start() {
 				w.WriteHeader(http.StatusOK)
 				w.Write(b)
 				return
+			case "VirtualMachineSpec":
+				var specs []v1.VirtualMachineSpecResource
+				if db.DB == nil {
+					http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				if name != "" {
+					var vs v1.VirtualMachineSpecResource
+					if err := db.DB.Where("metadata_name = ?", name).First(&vs).Error; err != nil {
+						http.Error(w, "VirtualMachineSpec not found", http.StatusNotFound)
+						return
+					}
+					b, _ := json.Marshal(vs)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					w.Write(b)
+					return
+				}
+				if err := db.DB.Find(&specs).Error; err != nil {
+					http.Error(w, "failed to list VirtualMachineSpec", http.StatusInternalServerError)
+					return
+				}
+				b, _ := json.Marshal(specs)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				w.Write(b)
+				return
 			case "Component":
 				var comps []v1.Component
 				if db.DB == nil {
@@ -376,6 +403,17 @@ func (c *Controller) Start() {
 					return
 				}
 				b, _ := json.Marshal(comp)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				w.Write(b)
+				return
+			case "VirtualMachineSpec":
+				var vs v1.VirtualMachineSpecResource
+				if db.DB == nil || db.DB.Where("metadata_name = ?", name).First(&vs).Error != nil {
+					http.Error(w, "VirtualMachineSpec not found", http.StatusNotFound)
+					return
+				}
+				b, _ := json.Marshal(vs)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				w.Write(b)

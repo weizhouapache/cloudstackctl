@@ -83,7 +83,7 @@ func init() {
 var getAll bool
 
 func init() {
-	getCmd.Flags().BoolVarP(&getAll, "all", "A", false, "Show all VMs from CloudStack (include unmanaged) — cluster mode only")
+	getCmd.Flags().BoolVarP(&getAll, "all", "A", false, "Show all VMs from CloudStack (include unmanaged) — controller mode only")
 }
 
 // tryDecodeAndPrint attempts to decode controller JSON into known typed

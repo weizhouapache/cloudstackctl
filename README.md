@@ -203,7 +203,7 @@ spec:
 Usage notes:
 
 - To run the CLI in standalone mode (no DB/controller): `./cloudstackctl -s get VirtualMachine` or `./cloudstackctl -s apply -f vm.yaml`.
-- To run in cluster mode (default), ensure the controller and Postgres are running; `apply` will send resources to the controller which persists them to the DB and reconciles via CloudStack.
+- To run in controller mode (default), ensure the controller and Postgres are running; `apply` will send resources to the controller which persists them to the DB and reconciles via CloudStack.
 
 ---
 

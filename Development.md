@@ -90,7 +90,7 @@ Modes and CLI behavior
 	- Unsupported in standalone: `Application`, `Component`, and `VirtualMachineSpec`. These higher-level constructs require the controller and DB.
 	- Supported in standalone: direct CloudStack resource kinds such as `VirtualMachine`, `Network`, `Volume`, `SSHKey`, `SecurityGroup`, `AffinityGroup`, and `UserData` (subject to SDK coverage).
 
-- Default behavior (cluster mode): when `-s` is not specified the CLI assumes cluster mode and operations are intended to be persisted to the database and reconciled by the controller. Resources are managed via the database/controller.
+- Default behavior (controller mode): when `-s` is not specified the CLI assumes controller mode and operations are intended to be persisted to the database and reconciled by the controller. Resources are managed via the database/controller.
 
 Examples:
 
@@ -108,7 +108,7 @@ Examples:
 CLI flags: `--all / -A`
 ------------------------
 
-Two commands support an `--all` (short `-A`) flag in cluster mode to query CloudStack directly rather than the controller DB:
+Two commands support an `--all` (short `-A`) flag in controller mode to query CloudStack directly rather than the controller DB:
 
 - `get VirtualMachine -A` — list all VMs from CloudStack (including unmanaged VMs); without `-A` the controller returns only VMs persisted in the DB (managed by cloudstackctl).
 - `describe <Kind> <name> -A` — describe the named resource by querying CloudStack directly rather than using controller-managed state.
