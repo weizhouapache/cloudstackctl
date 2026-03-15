@@ -4,18 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
 )
 
-// ListSecurityGroups prints a table of security groups.
-func ListSecurityGroups(name string) error {
+// ListSecurityGroups lists security groups and returns the SDK response for callers to format.
+func ListSecurityGroups(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.SecurityGroup.NewListSecurityGroupsParams()
 	if name != "" {
@@ -24,15 +22,9 @@ func ListSecurityGroups(name string) error {
 	}
 	resp, err := client.SecurityGroup.ListSecurityGroups(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tID\tDESCRIPTION")
-	for _, sg := range resp.SecurityGroups {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", sg.Name, sg.Id, sg.Description)
-	}
-	w.Flush()
-	return nil
+	return resp, err
 }
 
 // DescribeSecurityGroup prints JSON for a security group by name.

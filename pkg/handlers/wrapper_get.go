@@ -10,10 +10,10 @@ import (
 // include either a top-level `name` or `metadata.name` to request a single
 // resource. If no name is provided, the list function is called with an
 // empty name to list all resources of the given kind.
-func GetCloudStackResource(raw []byte) error {
+func GetCloudStackResource(raw []byte) (any, error) {
 	var meta map[string]interface{}
 	if err := json.Unmarshal(raw, &meta); err != nil {
-		return fmt.Errorf("invalid resource JSON: %w", err)
+		return nil, fmt.Errorf("invalid resource JSON: %w", err)
 	}
 
 	kind, _ := meta["kind"].(string)
@@ -47,6 +47,6 @@ func GetCloudStackResource(raw []byte) error {
 	case "UserData":
 		return ListUserData(name)
 	default:
-		return fmt.Errorf("unsupported resource kind for cloudstack get: %s", kind)
+		return nil, fmt.Errorf("unsupported resource kind for cloudstack get: %s", kind)
 	}
 }

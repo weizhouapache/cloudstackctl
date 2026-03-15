@@ -4,17 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"text/tabwriter"
 
 	"cloudstackctl/pkg/cloudstack"
 )
 
-// ListTemplates prints a table of templates.
-func ListTemplates(name string) error {
+// ListTemplates lists templates and returns the SDK response for callers to format.
+func ListTemplates(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Template.NewListTemplatesParams("")
 	if name != "" {
@@ -22,15 +20,9 @@ func ListTemplates(name string) error {
 	}
 	resp, err := client.Template.ListTemplates(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tID\tOS\tFEATURED")
-	for _, t := range resp.Templates {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%t\n", t.Name, t.Id, t.Ostypename, t.Isfeatured)
-	}
-	w.Flush()
-	return nil
+	return resp, err
 }
 
 // DescribeTemplate prints JSON for a template by name.

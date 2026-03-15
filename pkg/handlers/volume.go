@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
@@ -14,10 +12,10 @@ import (
 )
 
 // ListVolumes prints a table of volumes.
-func ListVolumes(name string) error {
+func ListVolumes(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Volume.NewListVolumesParams()
 	if name != "" {
@@ -25,16 +23,12 @@ func ListVolumes(name string) error {
 	}
 	resp, err := client.Volume.ListVolumes(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tID\tVM\tTYPE\tSTATUS")
-	for _, v := range resp.Volumes {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", v.Name, v.Id, v.Vmname, v.Type, v.State)
-	}
-	w.Flush()
-	return nil
+	return resp, err
 }
+
+// PrintVolumes moved to print.go
 
 // DescribeVolume prints JSON for a volume by name.
 func DescribeVolume(name string) error {

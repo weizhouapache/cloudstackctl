@@ -4,18 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
 )
 
-// ListVMs queries CloudStack and prints a table of VMs.
-func ListVMs(name string) error {
+// ListVMs queries CloudStack and returns the SDK response for callers to format.
+func ListVMs(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.VirtualMachine.NewListVirtualMachinesParams()
 	if name != "" {
@@ -23,19 +21,9 @@ func ListVMs(name string) error {
 	}
 	resp, err := client.VirtualMachine.ListVirtualMachines(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS")
-	for _, v := range resp.VirtualMachines {
-		id := v.Id
-		tmpl := v.Templatename
-		so := v.Serviceofferingname
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", v.Name, id, tmpl, so, v.State)
-	}
-	w.Flush()
-	return nil
+	return resp, err
 }
 
 // DescribeVM prints JSON for a VM identified by name.

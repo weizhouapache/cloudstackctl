@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
@@ -37,10 +35,10 @@ func ResolveNetwork(name string) (string, error) {
 }
 
 // ListNetworks queries CloudStack and prints a table of networks.
-func ListNetworks(name string) error {
+func ListNetworks(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Network.NewListNetworksParams()
 	if name != "" {
@@ -48,45 +46,13 @@ func ListNetworks(name string) error {
 	}
 	resp, err := client.Network.ListNetworks(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tID\tZONE\tVLAN\tDISPLAY TEXT\tTYPE\tSTATE")
-	for _, n := range resp.Networks {
-		display := n.Displaytext
-		if display == "" {
-			display = n.Name
-		}
-
-		zoneName := n.Zoneid
-		if n.Zoneid != "" {
-			zp := client.Zone.NewListZonesParams()
-			zp.SetId(n.Zoneid)
-			zr, zerr := client.Zone.ListZones(zp)
-			if zerr == nil && zr != nil && len(zr.Zones) > 0 {
-				zoneName = zr.Zones[0].Name
-			}
-		}
-
-		// Attempt to extract VLAN information from the returned network object
-		// via JSON to avoid SDK field name differences across versions.
-		vlan := ""
-		if b, merr := json.Marshal(n); merr == nil {
-			var m map[string]interface{}
-			if uerr := json.Unmarshal(b, &m); uerr == nil {
-				if v, ok := m["vlan"].(string); ok {
-					vlan = v
-				} else if v, ok := m["vlanid"].(string); ok {
-					vlan = v
-				}
-			}
-		}
-
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", n.Name, n.Id, zoneName, vlan, display, n.Type, n.State)
-	}
-	w.Flush()
-	return nil
+	return resp, err
 }
+
+// PrintNetworks prints a table of networks from the SDK slice.
+// PrintNetworks moved to print.go
 
 // DescribeNetwork prints JSON for a single network identified by name.
 func DescribeNetwork(name string) error {

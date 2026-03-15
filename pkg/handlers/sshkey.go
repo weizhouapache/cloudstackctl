@@ -4,18 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
 )
 
-// ListSSHKeys prints SSH key pairs.
-func ListSSHKeys(name string) error {
+// ListSSHKeys lists SSH key pairs and returns the SDK response for callers to format.
+func ListSSHKeys(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.SSH.NewListSSHKeyPairsParams()
 	if name != "" {
@@ -23,15 +21,9 @@ func ListSSHKeys(name string) error {
 	}
 	resp, err := client.SSH.ListSSHKeyPairs(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tFINGERPRINT")
-	for _, k := range resp.SSHKeyPairs {
-		fmt.Fprintf(w, "%s\t%s\n", k.Name, k.Fingerprint)
-	}
-	w.Flush()
-	return nil
+	return resp, err
 }
 
 // DescribeSSHKey prints JSON for an SSH key by name.

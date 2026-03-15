@@ -1,10 +1,13 @@
 package cli
 
 import (
+	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/handlers"
 	"encoding/json"
 	"log"
 	"net/url"
+
+	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 
 	"github.com/spf13/cobra"
 )
@@ -36,8 +39,10 @@ var getCmd = &cobra.Command{
 				payload["name"] = name
 			}
 			raw, _ := json.Marshal(payload)
-			if err := handlers.GetCloudStackResource(raw); err != nil {
+			if resp, err := handlers.GetCloudStackResource(raw); err != nil {
 				log.Fatalf("Local get failed: %v", err)
+			} else {
+				handlers.PrintCloudStackResource(resourceType, resp)
 			}
 			return
 		}
@@ -54,10 +59,82 @@ var getCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("Failed to query controller: %v", err)
 		}
-		println(string(body))
+
+		// If controller returned VM objects from DB, pretty-print them
+		if resourceType == "VirtualMachine" {
+			var vms []v1.VirtualMachine
+			if err := json.Unmarshal(body, &vms); err == nil {
+				handlers.PrintVMsFromDB(vms)
+				return
+			}
+		}
+
+		tryDecodeAndPrint(resourceType, body)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(getCmd)
+}
+
+// tryDecodeAndPrint attempts to decode controller JSON into known typed
+// responses and prints them using the shared handlers. Returns true if
+// printing was performed.
+func tryDecodeAndPrint(resourceType string, body []byte) bool {
+	// VMs are returned from the controller DB as []v1.VirtualMachine
+	if resourceType == "VirtualMachine" {
+		var vms []v1.VirtualMachine
+		if err := json.Unmarshal(body, &vms); err == nil {
+			handlers.PrintVMsFromDB(vms)
+			return true
+		}
+	}
+
+	// Try CloudStack SDK response types for unmanaged resources so we can
+	// preserve typed slices (e.g., []*cs.Network) when printing.
+	switch resourceType {
+	case "Network":
+		var resp cs.ListNetworksResponse
+		if err := json.Unmarshal(body, &resp); err == nil {
+			handlers.PrintCloudStackResource(resourceType, &resp)
+			return true
+		}
+	case "Volume":
+		var resp cs.ListVolumesResponse
+		if err := json.Unmarshal(body, &resp); err == nil {
+			handlers.PrintCloudStackResource(resourceType, &resp)
+			return true
+		}
+	case "Template":
+		var resp cs.ListTemplatesResponse
+		if err := json.Unmarshal(body, &resp); err == nil {
+			handlers.PrintCloudStackResource(resourceType, &resp)
+			return true
+		}
+	case "SSHKey":
+		var resp cs.ListSSHKeyPairsResponse
+		if err := json.Unmarshal(body, &resp); err == nil {
+			handlers.PrintCloudStackResource(resourceType, &resp)
+			return true
+		}
+	case "SecurityGroup":
+		var resp cs.ListSecurityGroupsResponse
+		if err := json.Unmarshal(body, &resp); err == nil {
+			handlers.PrintCloudStackResource(resourceType, &resp)
+			return true
+		}
+	case "AffinityGroup":
+		var resp cs.ListAffinityGroupsResponse
+		if err := json.Unmarshal(body, &resp); err == nil {
+			handlers.PrintCloudStackResource(resourceType, &resp)
+			return true
+		}
+	case "UserData":
+		var resp cs.ListUserDataResponse
+		if err := json.Unmarshal(body, &resp); err == nil {
+			handlers.PrintCloudStackResource(resourceType, &resp)
+			return true
+		}
+	}
+	return false
 }

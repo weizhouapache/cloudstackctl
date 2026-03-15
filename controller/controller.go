@@ -239,6 +239,7 @@ func (c *Controller) Start() {
 				return
 			}
 			kind := r.URL.Query().Get("kind")
+			name := r.URL.Query().Get("name")
 			switch kind {
 			case "Application":
 				var apps []v1.Application
@@ -285,36 +286,21 @@ func (c *Controller) Start() {
 				w.WriteHeader(http.StatusOK)
 				w.Write(b)
 				return
-			// Unmanaged kinds: delegate to handlers/CloudStack client for listing and return raw JSON
-			case "Network":
-				resp, err := c.csClient.Network.ListNetworks(c.csClient.Network.NewListNetworksParams())
+			// Unmanaged kinds: delegate to handlers.GetCloudStackResource which
+			// centralizes CloudStack listing logic. Controller should not call
+			// CloudStack APIs directly.
+			case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData", "Template":
+				payload := map[string]string{"kind": kind}
+				if name != "" {
+					payload["name"] = name
+				}
+				raw, _ := json.Marshal(payload)
+				obj, err := handlers.GetCloudStackResource(raw)
 				if err != nil {
-					http.Error(w, "cloudstack list networks failed", http.StatusInternalServerError)
+					http.Error(w, fmt.Sprintf("failed to list %s: %v", kind, err), http.StatusInternalServerError)
 					return
 				}
-				b, _ := json.Marshal(resp.Networks)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				w.Write(b)
-				return
-			case "Volume":
-				resp, err := c.csClient.Volume.ListVolumes(c.csClient.Volume.NewListVolumesParams())
-				if err != nil {
-					http.Error(w, "cloudstack list volumes failed", http.StatusInternalServerError)
-					return
-				}
-				b, _ := json.Marshal(resp.Volumes)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				w.Write(b)
-				return
-			case "Template":
-				resp, err := c.csClient.Template.ListTemplates(c.csClient.Template.NewListTemplatesParams(""))
-				if err != nil {
-					http.Error(w, "cloudstack list templates failed", http.StatusInternalServerError)
-					return
-				}
-				b, _ := json.Marshal(resp.Templates)
+				b, _ := json.Marshal(obj)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				w.Write(b)
@@ -354,6 +340,7 @@ func (c *Controller) Start() {
 			case "Template":
 				params := c.csClient.Template.NewListTemplatesParams("")
 				params.SetName(name)
+				params.SetTemplatefilter("all")
 				resp, err := c.csClient.Template.ListTemplates(params)
 				if err != nil || resp == nil || len(resp.Templates) == 0 {
 					http.Error(w, "template not found", http.StatusNotFound)

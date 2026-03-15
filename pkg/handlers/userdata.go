@@ -4,8 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
@@ -43,10 +41,10 @@ func ApplyUserData(ud *v1.UserData) error {
 }
 
 // ListUserData lists registered CloudStack UserData entries.
-func ListUserData(name string) error {
+func ListUserData(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 
 	params := client.User.NewListUserDataParams()
@@ -55,17 +53,9 @@ func ListUserData(name string) error {
 	}
 	resp, err := client.User.ListUserData(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
-
-	// Print header and rows using tabwriter for aligned columns
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tID\tPROJECT\tACCOUNT")
-	for _, u := range resp.UserData {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", u.Name, u.Id, u.Project, u.Account)
-	}
-	w.Flush()
-	return nil
+	return resp, err
 }
 
 // DescribeUserData prints details for a UserData entry by name.
