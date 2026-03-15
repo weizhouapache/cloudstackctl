@@ -8,10 +8,10 @@ import (
 // DescribeCloudStackResource describes an unmanaged CloudStack resource based
 // on a raw JSON payload containing `kind` and `name` (or metadata.name).
 // This wrapper is for standalone CLI mode.
-func DescribeCloudStackResource(raw []byte) error {
+func DescribeCloudStackResource(raw []byte) (any, error) {
 	var meta map[string]interface{}
 	if err := json.Unmarshal(raw, &meta); err != nil {
-		return fmt.Errorf("invalid resource JSON: %w", err)
+		return nil, fmt.Errorf("invalid resource JSON: %w", err)
 	}
 
 	kind, _ := meta["kind"].(string)
@@ -26,7 +26,7 @@ func DescribeCloudStackResource(raw []byte) error {
 	}
 
 	if name == "" {
-		return fmt.Errorf("missing name for describe operation")
+		return nil, fmt.Errorf("missing name for describe operation")
 	}
 
 	switch kind {
@@ -49,6 +49,6 @@ func DescribeCloudStackResource(raw []byte) error {
 	case "Snapshot":
 		return DescribeSnapshot(name)
 	default:
-		return fmt.Errorf("unsupported resource kind for standalone describe: %s", kind)
+		return nil, fmt.Errorf("unsupported resource kind for standalone describe: %s", kind)
 	}
 }

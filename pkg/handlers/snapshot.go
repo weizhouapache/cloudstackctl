@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -33,24 +32,22 @@ func ListSnapshots(name string) error {
 	return nil
 }
 
-// DescribeSnapshot prints JSON for a snapshot by name.
-func DescribeSnapshot(name string) error {
+// DescribeSnapshot returns the snapshot object from CloudStack by name.
+func DescribeSnapshot(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Snapshot.NewListSnapshotsParams()
 	params.SetName(name)
 	resp, err := client.Snapshot.ListSnapshots(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp == nil || len(resp.Snapshots) == 0 {
-		return fmt.Errorf("snapshot %s not found", name)
+		return nil, fmt.Errorf("snapshot %s not found", name)
 	}
-	data, _ := json.MarshalIndent(resp.Snapshots[0], "", "  ")
-	log.Println(string(data))
-	return nil
+	return resp.Snapshots[0], nil
 }
 
 // DeleteSnapshot deletes a snapshot by name.

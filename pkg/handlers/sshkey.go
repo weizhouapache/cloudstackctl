@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
@@ -26,11 +25,11 @@ func ListSSHKeys(name string) (any, error) {
 	return resp, err
 }
 
-// DescribeSSHKey prints JSON for an SSH key by name.
-func DescribeSSHKey(name string) error {
+// DescribeSSHKey returns the SSH keypair object from CloudStack by name.
+func DescribeSSHKey(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.SSH.NewListSSHKeyPairsParams()
 	if name != "" {
@@ -38,14 +37,12 @@ func DescribeSSHKey(name string) error {
 	}
 	resp, err := client.SSH.ListSSHKeyPairs(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp == nil || len(resp.SSHKeyPairs) == 0 {
-		return fmt.Errorf("ssh key %s not found", name)
+		return nil, fmt.Errorf("ssh key %s not found", name)
 	}
-	data, _ := json.MarshalIndent(resp.SSHKeyPairs[0], "", "  ")
-	log.Println(string(data))
-	return nil
+	return resp.SSHKeyPairs[0], nil
 }
 
 // DeleteSSHKey deletes an SSH key by name.

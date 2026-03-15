@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
@@ -27,23 +26,21 @@ func ListVMs(name string) (any, error) {
 }
 
 // DescribeVM prints JSON for a VM identified by name.
-func DescribeVM(name string) error {
+func DescribeVM(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.VirtualMachine.NewListVirtualMachinesParams()
 	params.SetName(name)
 	resp, err := client.VirtualMachine.ListVirtualMachines(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp == nil || len(resp.VirtualMachines) == 0 {
-		return fmt.Errorf("vm %s not found", name)
+		return nil, fmt.Errorf("vm %s not found", name)
 	}
-	data, _ := json.MarshalIndent(resp.VirtualMachines[0], "", "  ")
-	log.Println(string(data))
-	return nil
+	return resp.VirtualMachines[0], nil
 }
 
 // DeleteVM deletes a VM by name in CloudStack.

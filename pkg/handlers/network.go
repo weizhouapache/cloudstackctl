@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
@@ -51,27 +50,22 @@ func ListNetworks(name string) (any, error) {
 	return resp, err
 }
 
-// PrintNetworks prints a table of networks from the SDK slice.
-// PrintNetworks moved to print.go
-
 // DescribeNetwork prints JSON for a single network identified by name.
-func DescribeNetwork(name string) error {
+func DescribeNetwork(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Network.NewListNetworksParams()
 	params.SetName(name)
 	resp, err := client.Network.ListNetworks(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp == nil || len(resp.Networks) == 0 {
-		return fmt.Errorf("network %s not found", name)
+		return nil, fmt.Errorf("network %s not found", name)
 	}
-	data, _ := json.MarshalIndent(resp.Networks[0], "", "  ")
-	log.Println(string(data))
-	return nil
+	return resp.Networks[0], nil
 }
 
 // DeleteNetwork deletes a network by name via CloudStack API.

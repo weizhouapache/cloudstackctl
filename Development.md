@@ -105,6 +105,27 @@ Examples:
 ./cloudstackctl apply -f application.yaml
 ```
 
+CLI flags: `--all / -A`
+------------------------
+
+Two commands support an `--all` (short `-A`) flag in cluster mode to query CloudStack directly rather than the controller DB:
+
+- `get VirtualMachine -A` — list all VMs from CloudStack (including unmanaged VMs); without `-A` the controller returns only VMs persisted in the DB (managed by cloudstackctl).
+- `describe <Kind> <name> -A` — describe the named resource by querying CloudStack directly rather than using controller-managed state.
+
+Examples:
+
+```bash
+# Cluster mode: list only managed VMs (default)
+./cloudstackctl get VirtualMachine
+
+# Cluster mode: list all VMs from CloudStack (include unmanaged)
+./cloudstackctl get VirtualMachine -A
+
+# Describe a VM from CloudStack directly
+./cloudstackctl describe VirtualMachine my-vm -A
+```
+
 ## PostgreSQL environment variables
 
 `cloudstackctl` reads the database connection from `DATABASE_DSN` if provided, or

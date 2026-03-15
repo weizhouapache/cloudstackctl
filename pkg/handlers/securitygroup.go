@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
@@ -27,22 +26,20 @@ func ListSecurityGroups(name string) (any, error) {
 	return resp, err
 }
 
-// DescribeSecurityGroup prints JSON for a security group by name.
-func DescribeSecurityGroup(name string) error {
+// DescribeSecurityGroup returns the security group object from CloudStack by name.
+func DescribeSecurityGroup(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	sg, _, err := client.SecurityGroup.GetSecurityGroupByName(name)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if sg == nil {
-		return fmt.Errorf("security group %s not found", name)
+		return nil, fmt.Errorf("security group %s not found", name)
 	}
-	data, _ := json.MarshalIndent(sg, "", "  ")
-	log.Println(string(data))
-	return nil
+	return sg, nil
 }
 
 // DeleteSecurityGroup deletes a security group by name.

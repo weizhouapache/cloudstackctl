@@ -345,46 +345,19 @@ func (c *Controller) Start() {
 				return
 			}
 			switch kind {
-			case "Network":
-				params := c.csClient.Network.NewListNetworksParams()
-				params.SetName(name)
-				resp, err := c.csClient.Network.ListNetworks(params)
-				if err != nil || resp == nil || len(resp.Networks) == 0 {
-					http.Error(w, "network not found", http.StatusNotFound)
+			case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData":
+				// Standalone: use local describe wrapper
+				payload := map[string]string{"kind": kind, "name": name}
+				raw, _ := json.Marshal(payload)
+				if resp, err := handlers.DescribeCloudStackResource(raw); err != nil {
+					log.Fatalf("Local describe failed: %v", err)
+				} else {
+					b, _ := json.Marshal(resp)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					w.Write(b)
 					return
 				}
-				b, _ := json.Marshal(resp.Networks[0])
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				w.Write(b)
-				return
-			case "Template":
-				params := c.csClient.Template.NewListTemplatesParams("")
-				params.SetName(name)
-				params.SetTemplatefilter("all")
-				resp, err := c.csClient.Template.ListTemplates(params)
-				if err != nil || resp == nil || len(resp.Templates) == 0 {
-					http.Error(w, "template not found", http.StatusNotFound)
-					return
-				}
-				b, _ := json.Marshal(resp.Templates[0])
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				w.Write(b)
-				return
-			case "Volume":
-				params := c.csClient.Volume.NewListVolumesParams()
-				params.SetName(name)
-				resp, err := c.csClient.Volume.ListVolumes(params)
-				if err != nil || resp == nil || len(resp.Volumes) == 0 {
-					http.Error(w, "volume not found", http.StatusNotFound)
-					return
-				}
-				b, _ := json.Marshal(resp.Volumes[0])
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				w.Write(b)
-				return
 			case "Application":
 				var app v1.Application
 				if db.DB == nil || db.DB.Where("metadata_name = ?", name).First(&app).Error != nil {
@@ -408,6 +381,24 @@ func (c *Controller) Start() {
 				w.Write(b)
 				return
 			case "VirtualMachine":
+				// If client asked for all, delegate to handlers which query CloudStack
+				if r.URL.Query().Get("all") == "true" {
+					payload := map[string]string{"kind": kind}
+					if name != "" {
+						payload["name"] = name
+					}
+					raw, _ := json.Marshal(payload)
+					obj, err := handlers.DescribeCloudStackResource(raw)
+					if err != nil {
+						http.Error(w, fmt.Sprintf("failed to describe %s: %v", kind, err), http.StatusInternalServerError)
+						return
+					}
+					b, _ := json.Marshal(obj)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					w.Write(b)
+					return
+				}
 				var vm v1.VirtualMachine
 				if db.DB == nil || db.DB.Where("metadata_name = ?", name).First(&vm).Error != nil {
 					http.Error(w, "virtualmachine not found", http.StatusNotFound)

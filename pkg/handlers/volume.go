@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
@@ -28,26 +27,22 @@ func ListVolumes(name string) (any, error) {
 	return resp, err
 }
 
-// PrintVolumes moved to print.go
-
-// DescribeVolume prints JSON for a volume by name.
-func DescribeVolume(name string) error {
+// DescribeVolume returns the volume object from CloudStack by name.
+func DescribeVolume(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Volume.NewListVolumesParams()
 	params.SetName(name)
 	resp, err := client.Volume.ListVolumes(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp == nil || len(resp.Volumes) == 0 {
-		return fmt.Errorf("volume %s not found", name)
+		return nil, fmt.Errorf("volume %s not found", name)
 	}
-	data, _ := json.MarshalIndent(resp.Volumes[0], "", "  ")
-	log.Println(string(data))
-	return nil
+	return resp.Volumes[0], nil
 }
 
 // DeleteVolume deletes a volume by name.

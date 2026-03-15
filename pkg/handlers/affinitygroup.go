@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
@@ -56,24 +55,22 @@ func ListAffinityGroups(name string) (any, error) {
 	return resp, err
 }
 
-// DescribeAffinityGroup prints details for an affinity group by name.
-func DescribeAffinityGroup(name string) error {
+// DescribeAffinityGroup returns the affinity group object from CloudStack by name.
+func DescribeAffinityGroup(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.AffinityGroup.NewListAffinityGroupsParams()
 	params.SetName(name)
 	resp, err := client.AffinityGroup.ListAffinityGroups(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp == nil || len(resp.AffinityGroups) == 0 {
-		return fmt.Errorf("affinity group %s not found", name)
+		return nil, fmt.Errorf("affinity group %s not found", name)
 	}
-	b, _ := json.MarshalIndent(resp.AffinityGroups[0], "", "  ")
-	fmt.Println(string(b))
-	return nil
+	return resp.AffinityGroups[0], nil
 }
 
 // ResolveAffinityGroup returns the CloudStack affinity group ID for a given name.

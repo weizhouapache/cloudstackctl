@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 
 	v1 "cloudstackctl/apis/v1"
@@ -58,25 +57,23 @@ func ListUserData(name string) (any, error) {
 	return resp, err
 }
 
-// DescribeUserData prints details for a UserData entry by name.
-func DescribeUserData(name string) error {
+// DescribeUserData returns the UserData object from CloudStack by name.
+func DescribeUserData(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 
 	params := client.User.NewListUserDataParams()
 	params.SetName(name)
 	resp, err := client.User.ListUserData(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp == nil || len(resp.UserData) == 0 {
-		return fmt.Errorf("userdata %s not found", name)
+		return nil, fmt.Errorf("userdata %s not found", name)
 	}
-	data, _ := json.MarshalIndent(resp.UserData[0], "", "  ")
-	fmt.Println(string(data))
-	return nil
+	return resp.UserData[0], nil
 }
 
 // ResolveUserData returns the CloudStack UserData ID for a given name.

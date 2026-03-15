@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
@@ -25,24 +24,22 @@ func ListTemplates(name string) (any, error) {
 	return resp, err
 }
 
-// DescribeTemplate prints JSON for a template by name.
-func DescribeTemplate(name string) error {
+// DescribeTemplate returns the template object from CloudStack by name.
+func DescribeTemplate(name string) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Template.NewListTemplatesParams("")
 	params.SetName(name)
 	resp, err := client.Template.ListTemplates(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return nil, fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp == nil || len(resp.Templates) == 0 {
-		return fmt.Errorf("template %s not found", name)
+		return nil, fmt.Errorf("template %s not found", name)
 	}
-	data, _ := json.MarshalIndent(resp.Templates[0], "", "  ")
-	log.Println(string(data))
-	return nil
+	return resp.Templates[0], nil
 }
 
 // DeleteTemplate deletes a template by name.
