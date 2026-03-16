@@ -15,7 +15,7 @@ func DeleteApplication(name string) {
 			log.Fatalf("Database unavailable: %v", err)
 		}
 	}
-	if err := db.DB.Where("metadata_name = ?", name).First(&app).Error; err != nil {
+	if err := db.DB.Where("name = ?", name).First(&app).Error; err != nil {
 		log.Fatalf("Application %s not found: %v", name, err)
 	}
 
@@ -38,7 +38,7 @@ func DeleteComponent(name string) {
 			log.Fatalf("Database unavailable: %v", err)
 		}
 	}
-	if err := db.DB.Where("metadata_name = ?", name).First(&comp).Error; err != nil {
+	if err := db.DB.Where("name = ?", name).First(&comp).Error; err != nil {
 		log.Fatalf("Component %s not found: %v", name, err)
 	}
 
@@ -67,7 +67,7 @@ func DeleteVM(name string) {
 	}
 
 	var vm v1.VirtualMachine
-	if err := db.DB.Where("metadata_name = ?", name).First(&vm).Error; err != nil {
+	if err := db.DB.Where("name = ?", name).First(&vm).Error; err != nil {
 		// Fallback: try CloudStack delete by name
 		csClient, cerr := cloudstack.NewClient()
 		if cerr != nil {
@@ -134,7 +134,7 @@ func DeleteNetwork(name string) {
 	}
 
 	var n v1.Network
-	if err := db.DB.Where("metadata_name = ?", name).First(&n).Error; err != nil {
+	if err := db.DB.Where("name = ?", name).First(&n).Error; err != nil {
 		log.Fatalf("Network %s not found: %v", name, err)
 	}
 

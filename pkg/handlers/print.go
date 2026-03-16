@@ -171,3 +171,57 @@ func PrintVMsFromDB(vms []v1.VirtualMachine) {
 	}
 	w.Flush()
 }
+
+// PrintComponents prints components returned by the controller DB query.
+func PrintComponents(comps []v1.Component) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tREPLICAS\tVM SPEC\tOBSERVED REPLICAS")
+	for _, c := range comps {
+		replicas := c.Spec.Replicas
+		vmSpec := c.Spec.VirtualMachineSpec
+		observed := c.ObservedReplicas
+		fmt.Fprintf(w, "%s\t%d\t%s\t%d\n", c.Metadata.Name, replicas, vmSpec, observed)
+	}
+	w.Flush()
+}
+
+// PrintVMSpecs prints VirtualMachineSpecResource entries in a compact table.
+func PrintVMSpecs(specs []v1.VirtualMachineSpecResource) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tTEMPLATE\tSERVICE OFFERING\tNETWORKS\tVOLUMES")
+	for _, s := range specs {
+		tmpl := s.Spec.Template
+		so := s.Spec.ServiceOffering
+		nets := ""
+		if len(s.Spec.NetworkIDs) > 0 {
+			nets = s.Spec.NetworkIDs[0]
+			for i := 1; i < len(s.Spec.NetworkIDs); i++ {
+				nets += "," + s.Spec.NetworkIDs[i]
+			}
+		}
+		volCount := 0
+		if len(s.Spec.Volumes) > 0 {
+			volCount = len(s.Spec.Volumes)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\n", s.Metadata.Name, tmpl, so, nets, volCount)
+	}
+	w.Flush()
+}
+
+// PrintApplications prints applications returned by the controller DB query.
+func PrintApplications(apps []v1.Application) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tCOMPONENTS\tPROJECT")
+	for _, a := range apps {
+		compNames := ""
+		if len(a.Spec.Components) > 0 {
+			compNames = a.Spec.Components[0].Name
+			for i := 1; i < len(a.Spec.Components); i++ {
+				compNames += "," + a.Spec.Components[i].Name
+			}
+		}
+		project := a.Spec.Project
+		fmt.Fprintf(w, "%s\t%s\t%s\n", a.Metadata.Name, compNames, project)
+	}
+	w.Flush()
+}

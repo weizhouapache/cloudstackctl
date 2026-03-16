@@ -51,19 +51,18 @@ func Init() error {
 
 	DB = db
 
-	// Ensure commonly queried indexes exist (metadata.name)
-	// GORM stores embedded metadata fields with column names like metadata_name
-	if !db.Migrator().HasIndex(&v1.Application{}, "metadata_name") {
-		db.Migrator().CreateIndex(&v1.Application{}, "metadata_name")
+	// Ensure commonly queried indexes exist (name)
+	if !db.Migrator().HasIndex(&v1.Application{}, "name") {
+		db.Migrator().CreateIndex(&v1.Application{}, "name")
 	}
-	if !db.Migrator().HasIndex(&v1.Component{}, "metadata_name") {
-		db.Migrator().CreateIndex(&v1.Component{}, "metadata_name")
+	if !db.Migrator().HasIndex(&v1.Component{}, "name") {
+		db.Migrator().CreateIndex(&v1.Component{}, "name")
 	}
-	if !db.Migrator().HasIndex(&v1.VirtualMachine{}, "metadata_name") {
-		db.Migrator().CreateIndex(&v1.VirtualMachine{}, "metadata_name")
+	if !db.Migrator().HasIndex(&v1.VirtualMachine{}, "name") {
+		db.Migrator().CreateIndex(&v1.VirtualMachine{}, "name")
 	}
-	if !db.Migrator().HasIndex(&v1.VirtualMachineSpecResource{}, "metadata_name") {
-		db.Migrator().CreateIndex(&v1.VirtualMachineSpecResource{}, "metadata_name")
+	if !db.Migrator().HasIndex(&v1.VirtualMachineSpecResource{}, "name") {
+		db.Migrator().CreateIndex(&v1.VirtualMachineSpecResource{}, "name")
 	}
 
 	log.Println("PostgreSQL initialized successfully")

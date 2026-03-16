@@ -4,6 +4,7 @@ import (
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/handlers"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/url"
 
@@ -72,7 +73,34 @@ var getCmd = &cobra.Command{
 			}
 		}
 
-		tryDecodeAndPrint(resourceType, body)
+		if tryDecodeAndPrint(resourceType, body) {
+			return
+		}
+
+		// Controller may return DB-backed resources; print them in-table when possible
+		switch resourceType {
+		case "Component":
+			var comps []v1.Component
+			if err := json.Unmarshal(body, &comps); err == nil {
+				handlers.PrintComponents(comps)
+				return
+			}
+		case "VirtualMachineSpec":
+			var specs []v1.VirtualMachineSpecResource
+			if err := json.Unmarshal(body, &specs); err == nil {
+				handlers.PrintVMSpecs(specs)
+				return
+			}
+		case "Application":
+			var apps []v1.Application
+			if err := json.Unmarshal(body, &apps); err == nil {
+				handlers.PrintApplications(apps)
+				return
+			}
+		}
+
+		// Fallback: print raw body
+		fmt.Println(string(body))
 	},
 }
 

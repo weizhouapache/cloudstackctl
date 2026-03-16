@@ -16,7 +16,7 @@ func DescribeApplication(name string) {
 	}
 
 	var app v1.Application
-	if err := db.DB.Where("metadata_name = ?", name).First(&app).Error; err != nil {
+	if err := db.DB.Where("name = ?", name).First(&app).Error; err != nil {
 		log.Fatalf("Application %s not found: %v", name, err)
 	}
 	data, _ := json.MarshalIndent(app, "", "  ")
@@ -32,7 +32,7 @@ func DescribeComponent(name string) {
 	}
 
 	var comp v1.Component
-	if err := db.DB.Where("metadata_name = ?", name).First(&comp).Error; err != nil {
+	if err := db.DB.Where("name = ?", name).First(&comp).Error; err != nil {
 		log.Fatalf("Component %s not found: %v", name, err)
 	}
 	data, _ := json.MarshalIndent(comp, "", "  ")
@@ -48,7 +48,7 @@ func DescribeVM(name string) {
 	}
 
 	var vm v1.VirtualMachine
-	if err := db.DB.Where("metadata_name = ?", name).First(&vm).Error; err != nil {
+	if err := db.DB.Where("name = ?", name).First(&vm).Error; err != nil {
 		log.Fatalf("VM %s not found: %v", name, err)
 	}
 	data, _ := json.MarshalIndent(vm, "", "  ")

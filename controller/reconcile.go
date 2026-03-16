@@ -62,7 +62,7 @@ func (c *Controller) ReconcileComponent(comp *v1.Component) error {
 
 	// Update observed replica count and persist effective spec if present
 	var count int64
-	if err := db.DB.Model(&v1.VirtualMachine{}).Where("metadata_name LIKE ?", comp.Metadata.Name+"-%").Count(&count).Error; err == nil {
+	if err := db.DB.Model(&v1.VirtualMachine{}).Where("name LIKE ?", comp.Metadata.Name+"-%").Count(&count).Error; err == nil {
 		comp.ObservedReplicas = int(count)
 	}
 
@@ -224,7 +224,7 @@ func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 func (c *Controller) createComponentVMs(comp *v1.Component, compRef v1.ComponentRef) error {
 	// Load the referenced reusable VM spec
 	var vsr v1.VirtualMachineSpecResource
-	if err := db.DB.Where("metadata_name = ?", compRef.VirtualMachineSpec).First(&vsr).Error; err != nil {
+	if err := db.DB.Where("name = ?", compRef.VirtualMachineSpec).First(&vsr).Error; err != nil {
 		return fmt.Errorf("virtualMachineSpec %s not found: %w", compRef.VirtualMachineSpec, err)
 	}
 
@@ -237,7 +237,7 @@ func (c *Controller) createComponentVMs(comp *v1.Component, compRef v1.Component
 
 		// Skip if VM already exists
 		var existing v1.VirtualMachine
-		if err := db.DB.Where("metadata_name = ?", vmName).First(&existing).Error; err == nil {
+		if err := db.DB.Where("name = ?", vmName).First(&existing).Error; err == nil {
 			// VM already present, skip creation
 			continue
 		}
@@ -266,7 +266,7 @@ func (c *Controller) createComponentVMs(comp *v1.Component, compRef v1.Component
 
 	// After creating/ensuring VMs, update observed replica count and persist component effective spec
 	var count int64
-	if err := db.DB.Model(&v1.VirtualMachine{}).Where("metadata_name LIKE ?", comp.Metadata.Name+"-%").Count(&count).Error; err == nil {
+	if err := db.DB.Model(&v1.VirtualMachine{}).Where("name LIKE ?", comp.Metadata.Name+"-%").Count(&count).Error; err == nil {
 		comp.ObservedReplicas = int(count)
 	}
 	if err := db.DB.Save(comp).Error; err != nil {

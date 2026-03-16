@@ -22,7 +22,7 @@ func ListApplications(name string) {
 
 	if name != "" {
 		var app v1.Application
-		if err := db.DB.Where("metadata_name = ?", name).First(&app).Error; err != nil {
+		if err := db.DB.Where("name = ?", name).First(&app).Error; err != nil {
 			log.Fatalf("Application %s not found: %v", name, err)
 		}
 		b, _ := json.MarshalIndent(app, "", "  ")
@@ -62,7 +62,7 @@ func ListComponents(name string) {
 
 	if name != "" {
 		var comp v1.Component
-		if err := db.DB.Where("metadata_name = ?", name).First(&comp).Error; err != nil {
+		if err := db.DB.Where("name = ?", name).First(&comp).Error; err != nil {
 			log.Fatalf("Component %s not found: %v", name, err)
 		}
 		b, _ := json.MarshalIndent(comp, "", "  ")
@@ -101,7 +101,7 @@ func ListVirtualMachineSpec(name string) {
 
 	if name != "" {
 		var vs v1.VirtualMachineSpecResource
-		if err := db.DB.Where("metadata_name = ?", name).First(&vs).Error; err != nil {
+		if err := db.DB.Where("name = ?", name).First(&vs).Error; err != nil {
 			log.Fatalf("VirtualMachineSpec %s not found: %v", name, err)
 		}
 		b, _ := json.MarshalIndent(vs, "", "  ")
@@ -144,7 +144,7 @@ func ListVMs(name string) {
 
 	if name != "" {
 		var vm v1.VirtualMachine
-		if err := db.DB.Where("metadata_name = ?", name).First(&vm).Error; err != nil {
+		if err := db.DB.Where("name = ?", name).First(&vm).Error; err != nil {
 			log.Fatalf("VirtualMachine %s not found: %v", name, err)
 		}
 		b, _ := json.MarshalIndent(vm, "", "  ")

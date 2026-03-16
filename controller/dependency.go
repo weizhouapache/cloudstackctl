@@ -16,7 +16,7 @@ func (c *Controller) ResolveComponentDependencies(app *v1.Application) error {
 	// Process components in order (dependency enforcement)
 	for i, compRef := range app.Spec.Components {
 		var component v1.Component
-		if err := db.DB.Where("metadata_name = ?", compRef.Name).First(&component).Error; err != nil {
+		if err := db.DB.Where("name = ?", compRef.Name).First(&component).Error; err != nil {
 			log.Printf("Component %s not found: %v", compRef.Name, err)
 			return err
 		}
@@ -58,7 +58,7 @@ func (c *Controller) waitForComponentHealth(componentName string) error {
 			return logError("Component %s health check timed out", componentName)
 		case <-ticker.C:
 			var component v1.Component
-			if err := db.DB.Where("metadata_name = ?", componentName).First(&component).Error; err != nil {
+			if err := db.DB.Where("name = ?", componentName).First(&component).Error; err != nil {
 				return err
 			}
 
