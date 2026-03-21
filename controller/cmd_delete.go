@@ -7,7 +7,8 @@ import (
 	"log"
 )
 
-// DeleteApplication deletes an Application and its dependent resources
+// DeleteApplication deletes an Application and disassociates its Components
+// (it does NOT delete VMs; VMs are owned by the Application lifecycle)
 func DeleteApplication(name string) {
 	var app v1.Application
 	if db.DB == nil {
@@ -20,7 +21,9 @@ func DeleteApplication(name string) {
 	}
 
 	for _, compRef := range app.Spec.Components {
-		DeleteComponent(compRef.Name)
+		// Remove the component record but do NOT delete VMs here; VMs belong to the application lifecycle.
+		db.DB.Where("name = ?", compRef.Name).Delete(&v1.Component{})
+		log.Printf("Component %s disassociated from application %s", compRef.Name, name)
 	}
 
 	if err := db.DB.Delete(&app).Error; err != nil {
@@ -30,7 +33,8 @@ func DeleteApplication(name string) {
 	log.Printf("Application %s deleted successfully", name)
 }
 
-// DeleteComponent deletes a Component and its VMs
+// DeleteComponent deletes a Component record if it's not referenced by any
+// Application. It does NOT delete VMs (VMs belong to applications).
 func DeleteComponent(name string) {
 	var comp v1.Component
 	if db.DB == nil {
@@ -42,13 +46,16 @@ func DeleteComponent(name string) {
 		log.Fatalf("Component %s not found: %v", name, err)
 	}
 
-	var vms []v1.VirtualMachine
-	if err := db.DB.Where("metadata_labels @> ?", map[string]string{"component": name}).Find(&vms).Error; err != nil {
-		log.Fatalf("Failed to find VMs for component %s: %v", name, err)
-	}
-
-	for _, vm := range vms {
-		DeleteVM(vm.Metadata.Name)
+	// Do not delete VMs here. Prevent deletion if the component is still referenced by any Application.
+	var apps []v1.Application
+	if err := db.DB.Find(&apps).Error; err == nil {
+		for _, a := range apps {
+			for _, cref := range a.Spec.Components {
+				if cref.Name == name {
+					log.Fatalf("Component %s is still referenced by Application %s; cannot delete", name, a.Metadata.Name)
+				}
+			}
+		}
 	}
 
 	if err := db.DB.Delete(&comp).Error; err != nil {

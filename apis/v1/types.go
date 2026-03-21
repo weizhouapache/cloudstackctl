@@ -98,6 +98,8 @@ type VirtualMachine struct {
 	Status     Status             `json:"status,omitempty" gorm:"embedded"`
 	// ObservedSpec stores the configuration fetched from CloudStack (observed state)
 	ObservedSpec VirtualMachineSpec `json:"observedSpec,omitempty" yaml:"observedSpec,omitempty" gorm:"serializer:json"`
+	// ApplicationID links this VM to a parent Application (store application name or id)
+	ApplicationID string `json:"applicationId,omitempty" yaml:"applicationId,omitempty" gorm:"column:application_id"`
 }
 
 // VirtualMachineSpec defines reusable VM configuration (template/offering/network)
