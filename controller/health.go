@@ -61,12 +61,12 @@ func (c *Controller) CheckComponentHealth(component *v1.Component) (bool, error)
 // CheckVMHealth performs ping/SSH health check for a VM
 func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
 	// Skip if VM not created in CloudStack
-	if vm.Status.CloudStackID == "" {
+	if vm.CloudStackID == "" {
 		return false, nil
 	}
 	// Query CloudStack for the VM to obtain its IP(s)
 	params := c.csClient.VirtualMachine.NewListVirtualMachinesParams()
-	params.SetId(vm.Status.CloudStackID)
+	params.SetId(vm.CloudStackID)
 	resp, err := c.csClient.VirtualMachine.ListVirtualMachines(params)
 	if err != nil {
 		log.Printf("failed to describe VM %s: %v", vm.Metadata.Name, err)
@@ -75,7 +75,7 @@ func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
 		return false, db.DB.Save(vm).Error
 	}
 	if resp == nil || len(resp.VirtualMachines) == 0 {
-		log.Printf("no CloudStack VM found for %s (id=%s)", vm.Metadata.Name, vm.Status.CloudStackID)
+		log.Printf("no CloudStack VM found for %s (id=%s)", vm.Metadata.Name, vm.CloudStackID)
 		vm.Status.Ready = false
 		vm.Status.LastChecked = time.Now()
 		return false, db.DB.Save(vm).Error
@@ -92,7 +92,7 @@ func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
 		}
 	}
 	if vmIP == "" {
-		log.Printf("no IP address found for VM %s (id=%s)", vm.Metadata.Name, vm.Status.CloudStackID)
+		log.Printf("no IP address found for VM %s (id=%s)", vm.Metadata.Name, vm.CloudStackID)
 		vm.Status.Ready = false
 		vm.Status.LastChecked = time.Now()
 		return false, db.DB.Save(vm).Error

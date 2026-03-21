@@ -13,13 +13,13 @@ func (c *Controller) DetectDrift(vm *v1.VirtualMachine) error {
 	log.Printf("Checking drift for VM: %s", vm.Metadata.Name)
 
 	// Skip if VM not created in CloudStack
-	if vm.Status.CloudStackID == "" {
+	if vm.CloudStackID == "" {
 		vm.Status.Drift = false
 		return nil
 	}
 
 	// Get actual VM state from CloudStack
-	actualState, err := cloudstack.GetVMState(c.csClient, vm.Status.CloudStackID)
+	actualState, err := cloudstack.GetVMState(c.csClient, vm.CloudStackID)
 	if err != nil {
 		return err
 	}

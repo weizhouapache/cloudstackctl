@@ -20,7 +20,6 @@ type Metadata struct {
 type Status struct {
 	ObservedState string    `json:"observedState,omitempty"` // Running/Failed/Pending
 	Ready         bool      `json:"ready,omitempty"`         // Health check status
-	CloudStackID  string    `json:"cloudStackId,omitempty"`  // External ID in CloudStack
 	LastChecked   time.Time `json:"lastChecked,omitempty"`   // Last health check timestamp
 	Drift         bool      `json:"drift,omitempty"`         // True if desired != observed state
 }
@@ -100,6 +99,8 @@ type VirtualMachine struct {
 	ObservedSpec VirtualMachineSpec `json:"observedSpec,omitempty" yaml:"observedSpec,omitempty" gorm:"serializer:json"`
 	// ApplicationID links this VM to a parent Application (store application name or id)
 	ApplicationID string `json:"applicationId,omitempty" yaml:"applicationId,omitempty" gorm:"column:application_id"`
+	// CloudStackID is the external provider ID for this VM in CloudStack
+	CloudStackID string `json:"cloudStackId,omitempty" yaml:"cloudStackId,omitempty" gorm:"column:cloudstack_id"`
 }
 
 // VirtualMachineSpec defines reusable VM configuration (template/offering/network)

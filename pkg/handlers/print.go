@@ -150,7 +150,7 @@ func PrintVMsFromDB(vms []v1.VirtualMachine) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS\tREADY\tDRIFT")
 	for _, vm := range vms {
-		id := vm.Status.CloudStackID
+		id := vm.CloudStackID
 		tmpl := vm.Spec.Template
 		if tmpl == "" && vm.ObservedSpec.Template != "" {
 			tmpl = vm.ObservedSpec.Template

@@ -96,12 +96,12 @@ func DeleteVM(name string) {
 		log.Fatalf("VM %s not found: %v", name, err)
 	}
 
-	if vm.Status.CloudStackID != "" {
+	if vm.CloudStackID != "" {
 		csClient, err := cloudstack.NewClient()
 		if err != nil {
 			log.Printf("Warning: CloudStack client unavailable, skipping CloudStack delete: %v", err)
 		} else {
-			params := csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.Status.CloudStackID)
+			params := csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.CloudStackID)
 			if _, err := csClient.VirtualMachine.DestroyVirtualMachine(params); err != nil {
 				log.Printf("Warning: Failed to delete VM %s from CloudStack: %v", name, err)
 			}

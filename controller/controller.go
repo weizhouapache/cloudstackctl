@@ -586,8 +586,8 @@ func (c *Controller) handleDelete(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "virtualmachine not found", http.StatusNotFound)
 			return
 		}
-		if vm.Status.CloudStackID != "" {
-			dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.Status.CloudStackID)
+		if vm.CloudStackID != "" {
+			dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.CloudStackID)
 			c.csClient.VirtualMachine.DestroyVirtualMachine(dp)
 		}
 		db.DB.Delete(&vm)
@@ -704,7 +704,7 @@ func (c *Controller) applyVMSpec(vs *v1.VirtualMachineSpecResource) error {
 func (c *Controller) applyVM(vm *v1.VirtualMachine) error {
 	// Attempt to find the VM in CloudStack by CloudStackID or by name
 	// If CloudStackID is empty, try to discover VM in CloudStack
-	if vm.Status.CloudStackID == "" {
+	if vm.CloudStackID == "" {
 		// search CloudStack by name and project
 		params := c.csClient.VirtualMachine.NewListVirtualMachinesParams()
 		params.SetName(vm.Metadata.Name)
@@ -720,7 +720,7 @@ func (c *Controller) applyVM(vm *v1.VirtualMachine) error {
 		resp, err := c.csClient.VirtualMachine.ListVirtualMachines(params)
 		if err == nil && resp != nil && len(resp.VirtualMachines) > 0 {
 			// associate existing CloudStack VM
-			vm.Status.CloudStackID = resp.VirtualMachines[0].Id
+			vm.CloudStackID = resp.VirtualMachines[0].Id
 			vm.Status.ObservedState = resp.VirtualMachines[0].State
 		}
 	}
@@ -746,8 +746,8 @@ func (c *Controller) applyVM(vm *v1.VirtualMachine) error {
 	}
 
 	// Update CloudStackID and observed state if discovered
-	if vm.Status.CloudStackID != "" {
-		existing.Status.CloudStackID = vm.Status.CloudStackID
+	if vm.CloudStackID != "" {
+		existing.CloudStackID = vm.CloudStackID
 		existing.Status.ObservedState = vm.Status.ObservedState
 	}
 

@@ -82,12 +82,12 @@ func (c *Controller) ReconcileVM(vm *v1.VirtualMachine) error {
 	}
 
 	// Check if VM exists; if not, create it
-	if vm.Status.CloudStackID == "" {
+	if vm.CloudStackID == "" {
 		if id, err := handlers.ApplyVirtualMachineManaged(vm, true); err != nil {
 			return err
 		} else {
 			if id != "" {
-				vm.Status.CloudStackID = id
+				vm.CloudStackID = id
 				db.DB.Save(vm)
 			}
 		}
@@ -112,8 +112,8 @@ func (c *Controller) ReconcileVM(vm *v1.VirtualMachine) error {
 func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 	// Use SDK to list by id or name
 	lp := c.csClient.VirtualMachine.NewListVirtualMachinesParams()
-	if vm.Status.CloudStackID != "" {
-		lp.SetId(vm.Status.CloudStackID)
+	if vm.CloudStackID != "" {
+		lp.SetId(vm.CloudStackID)
 	} else {
 		lp.SetName(vm.Metadata.Name)
 	}
@@ -128,9 +128,9 @@ func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 
 	v := resp.VirtualMachines[0]
 
-	// if vm.Status.CloudStackID is not set, set it from the observed VM
-	if vm.Status.CloudStackID == "" && v.Id != "" {
-		vm.Status.CloudStackID = v.Id
+	// if vm.CloudStackID is not set, set it from the observed VM
+	if vm.CloudStackID == "" && v.Id != "" {
+		vm.CloudStackID = v.Id
 	}
 
 	// Map some observed fields into ObservedSpec using SDK types directly
@@ -194,9 +194,9 @@ func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 	}
 
 	// Volumes: list volumes attached to the VM if we have CloudStack ID
-	if vm.Status.CloudStackID != "" {
+	if vm.CloudStackID != "" {
 		vp := c.csClient.Volume.NewListVolumesParams()
-		vp.SetVirtualmachineid(vm.Status.CloudStackID)
+		vp.SetVirtualmachineid(vm.CloudStackID)
 		volResp, verr := c.csClient.Volume.ListVolumes(vp)
 		if verr == nil && volResp != nil && len(volResp.Volumes) > 0 {
 			obs.Volumes = []v1.VolumeSpec{}
@@ -280,7 +280,7 @@ func (c *Controller) createComponentVMs(comp *v1.Component, compRef v1.Component
 			return err
 		} else {
 			if id != "" {
-				vm.Status.CloudStackID = id
+				vm.CloudStackID = id
 				db.DB.Save(vm)
 			}
 		}
