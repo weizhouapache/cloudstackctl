@@ -5,7 +5,7 @@ metadata:
 spec:
   template: my-template
   serviceOffering: small
-  networkIDs:
+  networks:
     - example-network
   sshKeys:
     - my-key

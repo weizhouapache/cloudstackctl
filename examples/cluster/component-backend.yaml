@@ -1,0 +1,10 @@
+apiVersion: cloudstackctl/v1
+kind: Component
+metadata:
+  name: backend
+spec:
+  vmSpec:
+    name: backend-vmspec
+  template: my-template
+  serviceOffering: small
+  count: 2

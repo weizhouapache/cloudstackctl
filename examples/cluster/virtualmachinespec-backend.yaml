@@ -1,14 +1,14 @@
 apiVersion: cloudstackctl/v1
 kind: VirtualMachineSpec
 metadata:
-  name: basic-vm-spec
+  name: backend-vmspec
 spec:
-  template: ubuntu-22.04
-  serviceOffering: medium
+  template: my-template
+  serviceOffering: small
   networks:
-    - existing-network-1-id
+    - example-network
   sshKeys:
-    - platform-admin
+    - my-key
   volumes:
     - name: data-disk
       type: data

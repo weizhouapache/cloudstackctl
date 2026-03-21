@@ -60,6 +60,7 @@ func DeleteVM(name string) error {
 	}
 	vid := resp.VirtualMachines[0].Id
 	delp := client.VirtualMachine.NewDestroyVirtualMachineParams(vid)
+	delp.SetExpunge(true) // Permanently remove the VM instead of just stopping it
 	if _, err := client.VirtualMachine.DestroyVirtualMachine(delp); err != nil {
 		return fmt.Errorf("failed to delete vm %s: %w", name, err)
 	}
@@ -118,8 +119,8 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) error {
 	}
 
 	// Resolve network names to IDs where provided
-	resolvedNets := make([]string, 0, len(vm.Spec.NetworkIDs))
-	for _, n := range vm.Spec.NetworkIDs {
+	resolvedNets := make([]string, 0, len(vm.Spec.Networks))
+	for _, n := range vm.Spec.Networks {
 		nid, nerr := ResolveNetwork(n)
 		if nerr != nil {
 			return fmt.Errorf("failed to resolve network %s: %w", n, nerr)
@@ -146,7 +147,7 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) error {
 			params.SetProjectid(vm.Spec.Project)
 		}
 	}
-	if len(vm.Spec.NetworkIDs) > 0 {
+	if len(vm.Spec.Networks) > 0 {
 		params.SetNetworkids(resolvedNets)
 	}
 	if len(vm.Spec.SSHKeys) > 0 {

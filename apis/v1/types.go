@@ -106,7 +106,7 @@ type VirtualMachineSpec struct {
 	Project         string        `json:"project,omitempty" yaml:"project"`                                            // CloudStack project ID or name
 	Template        string        `json:"template,omitempty" yaml:"template"`                                          // VM template name/ID
 	ServiceOffering string        `json:"serviceOffering,omitempty" yaml:"serviceOffering"`                            // VM service offering (size)
-	NetworkIDs      []string      `json:"networkIds,omitempty" yaml:"networkIds" gorm:"serializer:json"`               // Attached networks
+	Networks        []string      `json:"networks,omitempty" yaml:"networks" gorm:"serializer:json"`                   // Attached networks
 	SSHKeys         []string      `json:"sshKeys,omitempty" yaml:"sshKeys" gorm:"serializer:json"`                     // SSH keys for access
 	SecurityGroups  []string      `json:"securityGroups,omitempty" yaml:"securityGroups" gorm:"serializer:json"`       // Firewall groups
 	AffinityGroups  []string      `json:"affinityGroups,omitempty" yaml:"affinityGroups" gorm:"serializer:json"`       // Host/VM affinity rules

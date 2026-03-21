@@ -125,12 +125,12 @@ func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 		obs.ServiceOffering = v.Serviceofferingid
 	}
 
-	// NICs -> NetworkIDs
+	// NICs -> Networks
 	if len(v.Nic) > 0 {
-		obs.NetworkIDs = []string{}
+		obs.Networks = []string{}
 		for _, n := range v.Nic {
 			if n.Networkid != "" {
-				obs.NetworkIDs = append(obs.NetworkIDs, n.Networkid)
+				obs.Networks = append(obs.Networks, n.Networkid)
 			}
 		}
 	}

@@ -193,10 +193,10 @@ func PrintVMSpecs(specs []v1.VirtualMachineSpecResource) {
 		tmpl := s.Spec.Template
 		so := s.Spec.ServiceOffering
 		nets := ""
-		if len(s.Spec.NetworkIDs) > 0 {
-			nets = s.Spec.NetworkIDs[0]
-			for i := 1; i < len(s.Spec.NetworkIDs); i++ {
-				nets += "," + s.Spec.NetworkIDs[i]
+		if len(s.Spec.Networks) > 0 {
+			nets = s.Spec.Networks[0]
+			for i := 1; i < len(s.Spec.Networks); i++ {
+				nets += "," + s.Spec.Networks[i]
 			}
 		}
 		volCount := 0

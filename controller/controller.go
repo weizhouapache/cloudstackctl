@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/db"
 	"cloudstackctl/pkg/handlers"
@@ -97,11 +98,60 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 		}
 		applyErr = c.applyApplication(&app)
 	case "Component":
-		var comp v1.Component
-		if err := json.Unmarshal(body, &comp); err != nil {
+		// Accept two forms for Component.spec.virtualMachineSpec:
+		// - a string referencing a named VirtualMachineSpec
+		// - an inline object describing a VirtualMachineSpec
+		type compSpecIn struct {
+			VirtualMachineSpec json.RawMessage       `json:"virtualMachineSpec"`
+			Replicas           int                   `json:"replicas"`
+			Overrides          v1.ComponentOverrides `json:"overrides"`
+			HealthChecks       []v1.HealthCheck      `json:"healthChecks"`
+		}
+		type compIn struct {
+			APIVersion string      `json:"apiVersion"`
+			Kind       string      `json:"kind"`
+			Metadata   v1.Metadata `json:"metadata"`
+			Spec       compSpecIn  `json:"spec"`
+			Status     v1.Status   `json:"status"`
+		}
+
+		var ci compIn
+		if err := json.Unmarshal(body, &ci); err != nil {
 			http.Error(w, "failed to parse Component", http.StatusBadRequest)
 			return
 		}
+
+		comp := v1.Component{
+			APIVersion: ci.APIVersion,
+			Kind:       ci.Kind,
+			Metadata:   ci.Metadata,
+			Spec: v1.ComponentSpec{
+				Replicas:     ci.Spec.Replicas,
+				Overrides:    ci.Spec.Overrides,
+				HealthChecks: ci.Spec.HealthChecks,
+			},
+		}
+
+		// Interpret VirtualMachineSpec field which may be a string or object
+		if len(ci.Spec.VirtualMachineSpec) > 0 {
+			// If it starts with a quote it's a JSON string
+			b := ci.Spec.VirtualMachineSpec
+			// trim whitespace
+			trimmed := bytes.TrimSpace(b)
+			if len(trimmed) > 0 && trimmed[0] == '"' {
+				var ref string
+				if err := json.Unmarshal(b, &ref); err == nil {
+					comp.Spec.VirtualMachineSpec = ref
+				}
+			} else {
+				// Attempt to decode inline VirtualMachineSpec
+				var vms v1.VirtualMachineSpec
+				if err := json.Unmarshal(b, &vms); err == nil {
+					comp.EffectiveSpec = vms
+				}
+			}
+		}
+
 		applyErr = c.applyComponent(&comp)
 	case "VirtualMachine":
 		var vm v1.VirtualMachine
@@ -119,7 +169,7 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 
 	if applyErr != nil {
 		log.Printf("apply error for kind=%s: %v", kind, applyErr)
-		http.Error(w, "failed to apply resource", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("failed to apply resource: %v", applyErr), http.StatusInternalServerError)
 		return
 	}
 
@@ -618,11 +668,11 @@ func compareVMSpec(a, b v1.VirtualMachineSpec) bool {
 	if a.Project != b.Project {
 		return false
 	}
-	if len(a.NetworkIDs) != len(b.NetworkIDs) {
+	if len(a.Networks) != len(b.Networks) {
 		return false
 	}
-	for i := range a.NetworkIDs {
-		if a.NetworkIDs[i] != b.NetworkIDs[i] {
+	for i := range a.Networks {
+		if a.Networks[i] != b.Networks[i] {
 			return false
 		}
 	}

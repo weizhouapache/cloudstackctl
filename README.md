@@ -104,7 +104,7 @@ Quick reference for the key fields users will commonly set for higher-level reso
 | `metadata.name` | string | Reusable VM spec identifier |
 | `spec.template` | string | Template name or ID |
 | `spec.serviceOffering` | string | Service offering (size) |
-| `spec.networkIds` | list | Network IDs to attach |
+| `spec.networks` | list | Network IDs to attach |
 | `spec.sshKeys` | list | SSH key names to inject |
 | `spec.userDataRefs` | list | Optional references to `UserData` resources |
 ---
@@ -122,7 +122,7 @@ spec:
   zone: zone-1
   template: ubuntu-22.04
   serviceOffering: medium
-  networkIds:
+  networks:
     - existing-network-1-id
   sshKeys:
     - platform-admin
@@ -183,7 +183,7 @@ spec:
   project: project-2
   template: ubuntu-22.04
   serviceOffering: medium
-  networkIds:
+  networks:
     - existing-network-1-id
   sshKeys:
     - platform-admin

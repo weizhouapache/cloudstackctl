@@ -117,7 +117,7 @@ func ListVirtualMachineSpec(name string) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tTEMPLATE\tSERVICE_OFFERING\tNETWORKS\tVOLUMES")
 	for _, s := range specs {
-		nets := strings.Join(s.Spec.NetworkIDs, ",")
+		nets := strings.Join(s.Spec.Networks, ",")
 		volCount := 0
 		if len(s.Spec.Volumes) > 0 {
 			volCount = len(s.Spec.Volumes)

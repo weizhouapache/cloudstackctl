@@ -7,7 +7,7 @@ spec:
   virtualMachineSpec:
     template: ubuntu-22.04
     serviceOffering: medium
-    networkIds:
+    networks:
       - existing-network-1-id
     sshKeys:
       - platform-admin
