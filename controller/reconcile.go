@@ -17,7 +17,7 @@ func (c *Controller) ReconcileAll() {
 
 	// Reconcile Applications
 	var apps []v1.Application
-	if err := db.DB.Find(&apps).Error; err != nil {
+	if err := db.DB.Where("deleted_at IS NULL").Find(&apps).Error; err != nil {
 		log.Printf("Failed to list applications: %v", err)
 		return
 	}
@@ -29,7 +29,7 @@ func (c *Controller) ReconcileAll() {
 	}
 	// Reconcile VMs
 	var vms []v1.VirtualMachine
-	if err := db.DB.Find(&vms).Error; err != nil {
+	if err := db.DB.Where("deleted_at IS NULL").Find(&vms).Error; err != nil {
 		log.Printf("Failed to list VMs: %v", err)
 		return
 	}
@@ -81,6 +81,18 @@ func (c *Controller) ReconcileVM(vm *v1.VirtualMachine) error {
 		return err
 	}
 
+	// Check if VM exists; if not, create it
+	if vm.Status.CloudStackID == "" {
+		if id, err := handlers.ApplyVirtualMachineManaged(vm, true); err != nil {
+			return err
+		} else {
+			if id != "" {
+				vm.Status.CloudStackID = id
+				db.DB.Save(vm)
+			}
+		}
+	}
+
 	// Check for drift
 	if err := c.DetectDrift(vm); err != nil {
 		return err
@@ -115,6 +127,11 @@ func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 	}
 
 	v := resp.VirtualMachines[0]
+
+	// if vm.Status.CloudStackID is not set, set it from the observed VM
+	if vm.Status.CloudStackID == "" && v.Id != "" {
+		vm.Status.CloudStackID = v.Id
+	}
 
 	// Map some observed fields into ObservedSpec using SDK types directly
 	obs := vm.ObservedSpec

@@ -79,6 +79,7 @@ func DeleteVM(name string) {
 		if resp != nil && len(resp.VirtualMachines) > 0 {
 			id := resp.VirtualMachines[0].Id
 			dp := csClient.VirtualMachine.NewDestroyVirtualMachineParams(id)
+			dp.SetExpunge(true)
 			if _, err := csClient.VirtualMachine.DestroyVirtualMachine(dp); err != nil {
 				log.Printf("Warning: Failed to delete VM %s from CloudStack: %v", name, err)
 			}
@@ -105,54 +106,4 @@ func DeleteVM(name string) {
 	}
 
 	log.Printf("VM %s deleted successfully", name)
-}
-
-// DeleteNetwork deletes a Network resource (handles standalone and controller modes)
-func DeleteNetwork(name string) {
-	if db.DB == nil {
-		// standalone or DB not initialized: try CloudStack directly
-		cs, err := cloudstack.NewClient()
-		if err != nil {
-			log.Fatalf("CloudStack client unavailable: %v", err)
-		}
-		params := cs.Network.NewListNetworksParams()
-		params.SetName(name)
-		resp, err := cs.Network.ListNetworks(params)
-		if err != nil {
-			log.Fatalf("CloudStack network lookup failed: %v", err)
-		}
-		if resp == nil || len(resp.Networks) == 0 {
-			log.Fatalf("Network %s not found in CloudStack", name)
-		}
-		nid := resp.Networks[0].Id
-		delp := cs.Network.NewDeleteNetworkParams(nid)
-		if _, err := cs.Network.DeleteNetwork(delp); err != nil {
-			log.Fatalf("Failed to delete Network %s from CloudStack: %v", name, err)
-		}
-		log.Printf("Network %s deleted from CloudStack (id=%s)", name, nid)
-		return
-	}
-
-	var n v1.Network
-	if err := db.DB.Where("name = ?", name).First(&n).Error; err != nil {
-		log.Fatalf("Network %s not found: %v", name, err)
-	}
-
-	if n.Status.CloudStackID != "" {
-		cs, err := cloudstack.NewClient()
-		if err != nil {
-			log.Printf("Warning: CloudStack client unavailable, skipping external delete: %v", err)
-		} else {
-			delp := cs.Network.NewDeleteNetworkParams(n.Status.CloudStackID)
-			if _, err := cs.Network.DeleteNetwork(delp); err != nil {
-				log.Printf("Warning: Failed to delete network %s from CloudStack: %v", name, err)
-			}
-		}
-	}
-
-	if err := db.DB.Delete(&n).Error; err != nil {
-		log.Fatalf("Failed to delete network %s from database: %v", name, err)
-	}
-
-	log.Printf("Network %s deleted successfully", name)
 }

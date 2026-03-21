@@ -82,6 +82,7 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 	kind, _ := meta["kind"].(string)
 	var applyErr error
 	var appliedID string
+	var appliedOp string // "created" | "updated" | "accepted"
 
 	switch kind {
 	case "VirtualMachineSpec":
@@ -89,6 +90,17 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 		if err := json.Unmarshal(body, &vs); err != nil {
 			http.Error(w, "failed to parse VirtualMachineSpec", http.StatusBadRequest)
 			return
+		}
+		// detect create vs update
+		if db.DB == nil {
+			appliedOp = "accepted"
+		} else {
+			var existing v1.VirtualMachineSpecResource
+			if db.DB.Where("name = ?", vs.Metadata.Name).First(&existing).Error != nil {
+				appliedOp = "created"
+			} else {
+				appliedOp = "updated"
+			}
 		}
 		applyErr = c.applyVMSpec(&vs)
 	case "Application":
@@ -153,6 +165,17 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// detect create vs update
+		if db.DB == nil {
+			appliedOp = "accepted"
+		} else {
+			var existing v1.Component
+			if db.DB.Where("name = ?", comp.Metadata.Name).First(&existing).Error != nil {
+				appliedOp = "created"
+			} else {
+				appliedOp = "updated"
+			}
+		}
 		applyErr = c.applyComponent(&comp)
 	case "VirtualMachine":
 		var vm v1.VirtualMachine
@@ -179,6 +202,15 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 
 	// Build response including created/applied resource id when available
 	respMap := map[string]string{"status": "success", "message": "resource accepted for reconciliation"}
+	if appliedOp != "" {
+		respMap["action"] = appliedOp
+		switch appliedOp {
+		case "created":
+			respMap["message"] = "resource created"
+		case "updated":
+			respMap["message"] = "resource updated"
+		}
+	}
 	if appliedID != "" {
 		respMap["id"] = appliedID
 		respMap["kind"] = kind
@@ -524,6 +556,18 @@ func (c *Controller) handleDelete(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"deleted"}`))
 		return
+	case "VirtualMachineSpec":
+		var spec v1.VirtualMachineSpecResource
+		if db.DB == nil || db.DB.Where("name = ?", name).First(&spec).Error != nil {
+			http.Error(w, "virtualmachinespec not found", http.StatusNotFound)
+			return
+		}
+		db.DB.Delete(&spec)
+		respMap := map[string]string{"status": "deleted", "kind": "VirtualMachineSpec", "name": name}
+		b, _ := json.Marshal(respMap)
+		w.WriteHeader(http.StatusOK)
+		w.Write(b)
+		return
 	case "VirtualMachine":
 		var vm v1.VirtualMachine
 		if db.DB == nil || db.DB.Where("name = ?", name).First(&vm).Error != nil {
@@ -533,6 +577,7 @@ func (c *Controller) handleDelete(w http.ResponseWriter, r *http.Request) {
 			if resp != nil && len(resp.VirtualMachines) > 0 {
 				id := resp.VirtualMachines[0].Id
 				dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(id)
+				dp.SetExpunge(true)
 				c.csClient.VirtualMachine.DestroyVirtualMachine(dp)
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte(`{"status":"deleted"}`))
@@ -682,7 +727,7 @@ func (c *Controller) applyVM(vm *v1.VirtualMachine) error {
 
 	// Persist desired state to DB (create or update)
 	var existing v1.VirtualMachine
-	if err := db.DB.Where("metadata ->> 'name' = ?", vm.Metadata.Name).First(&existing).Error; err != nil {
+	if err := db.DB.Where("name = ?", vm.Metadata.Name).First(&existing).Error; err != nil {
 		// record not found: create new record with observed CloudStack info
 		if err := db.DB.Save(vm).Error; err != nil {
 			return err
