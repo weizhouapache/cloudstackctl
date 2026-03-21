@@ -69,42 +69,42 @@ func DescribeNetwork(name string) (any, error) {
 }
 
 // DeleteNetwork deletes a network by name via CloudStack API.
-func DeleteNetwork(name string) error {
+func DeleteNetwork(name string) (string, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Network.NewListNetworksParams()
 	params.SetName(name)
 	resp, err := client.Network.ListNetworks(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return "", fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp == nil || len(resp.Networks) == 0 {
-		return fmt.Errorf("network %s not found", name)
+		return "", fmt.Errorf("network %s not found", name)
 	}
 	nid := resp.Networks[0].Id
 	delp := client.Network.NewDeleteNetworkParams(nid)
 	if _, err := client.Network.DeleteNetwork(delp); err != nil {
-		return fmt.Errorf("failed to delete network %s: %w", name, err)
+		return "", fmt.Errorf("failed to delete network %s: %w", name, err)
 	}
 	log.Printf("Network %s deleted from CloudStack (id=%s)", name, nid)
-	return nil
+	return nid, nil
 }
 
 // ApplyNetwork applies or updates a Network resource using the CloudStack API.
 // It searches for an existing network by name; if none is found, it creates one.
 // If an existing network is found, it updates the description when it differs
 // from the desired spec.
-func ApplyNetwork(netRes *v1.Network) error {
+func ApplyNetwork(netRes *v1.Network) (string, error) {
 	name := netRes.Metadata.Name
 	if name == "" {
-		return fmt.Errorf("network metadata.name is required")
+		return "", fmt.Errorf("network metadata.name is required")
 	}
 
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 
 	// Try to find existing network by name
@@ -113,23 +113,23 @@ func ApplyNetwork(netRes *v1.Network) error {
 	listParams.SetListall(true)
 	listResp, err := client.Network.ListNetworks(listParams)
 	if err != nil {
-		return fmt.Errorf("failed to list networks: %w", err)
+		return "", fmt.Errorf("failed to list networks: %w", err)
 	}
 
 	// Not found -> create
 	if listResp == nil || len(listResp.Networks) == 0 {
 		if netRes.Spec.NetworkOffering == "" || netRes.Spec.Zone == "" {
-			return fmt.Errorf("network create requires spec.networkOffering and spec.zone in standalone mode")
+			return "", fmt.Errorf("network create requires spec.networkOffering and spec.zone in standalone mode")
 		}
 		// Resolve zone name to ID; require resolution or return an error.
 		zoneID, zerr := ResolveZone(netRes.Spec.Zone)
 		if zerr != nil {
-			return fmt.Errorf("failed to resolve zone %s: %w", netRes.Spec.Zone, zerr)
+			return "", fmt.Errorf("failed to resolve zone %s: %w", netRes.Spec.Zone, zerr)
 		}
 		// Resolve network offering name to ID; require resolution.
 		offeringID, offErr := ResolveNetworkOffering(netRes.Spec.NetworkOffering)
 		if offErr != nil {
-			return fmt.Errorf("failed to resolve network offering %s: %w", netRes.Spec.NetworkOffering, offErr)
+			return "", fmt.Errorf("failed to resolve network offering %s: %w", netRes.Spec.NetworkOffering, offErr)
 		}
 		createParams := client.Network.NewCreateNetworkParams(name, offeringID, zoneID)
 		if netRes.Spec.Description != "" {
@@ -182,12 +182,12 @@ func ApplyNetwork(netRes *v1.Network) error {
 		}
 		resp, err := client.Network.CreateNetwork(createParams)
 		if err != nil {
-			return fmt.Errorf("cloudstack create network error: %w", err)
+			return "", fmt.Errorf("cloudstack create network error: %w", err)
 		}
 		log.Printf("Created Network %s (id=%s)", name, resp.Id)
-		return nil
+		return resp.Id, nil
 	}
 	// Resource exists — updates are not supported at this time
 	existing := listResp.Networks[0]
-	return fmt.Errorf("network %s already exists in CloudStack (id=%s); updates are not supported", name, existing.Id)
+	return "", fmt.Errorf("network %s already exists in CloudStack (id=%s); updates are not supported", name, existing.Id)
 }

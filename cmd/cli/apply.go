@@ -42,15 +42,21 @@ var applyCmd = &cobra.Command{
 			log.Fatalf("Invalid resource JSON: %v", err)
 		}
 
+		// Determine kind for logging and mode handling
+		kind, _ := meta["kind"].(string)
+
 		// standalone mode: apply the resource directly via handlers
 		if standalone {
 			// Application, Component, VirtualMachineSpec are only supported in controller mode
-			kind, _ := meta["kind"].(string)
 			if kind == "Application" || kind == "Component" || kind == "VirtualMachineSpec" {
 				log.Fatalf("%s is not supported in standalone mode", kind)
 			}
-			if err := handlers.ApplyCloudStackResource(jsonData); err != nil {
-				log.Fatalf("Local apply failed: %v", err)
+			if id, err := handlers.ApplyCloudStackResource(jsonData); err != nil {
+				log.Fatalf("Local apply failed for %s: %v", kind, err)
+			} else {
+				if id != "" {
+					log.Printf("Applied %s id=%s", kind, id)
+				}
 			}
 			return
 		}
@@ -60,7 +66,7 @@ var applyCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("Failed to POST to controller: %v", err)
 		}
-		log.Println("Resource accepted by controller:", string(body))
+		log.Printf("Controller accepted %s: %s", kind, string(body))
 	},
 }
 

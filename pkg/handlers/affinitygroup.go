@@ -10,32 +10,32 @@ import (
 
 // ApplyAffinityGroup ensures the AffinityGroup exists in CloudStack and creates
 // it when missing. It uses the AffinityGroup spec.type to create the group.
-func ApplyAffinityGroup(ag *v1.AffinityGroup) error {
+func ApplyAffinityGroup(ag *v1.AffinityGroup) (string, error) {
 	name := ag.Metadata.Name
 	if name == "" {
-		return fmt.Errorf("affinitygroup metadata.name is required")
+		return "", fmt.Errorf("affinitygroup metadata.name is required")
 	}
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 
 	// Try to find by name
 	existing, _, err := client.AffinityGroup.GetAffinityGroupByName(name)
 	if err == nil && existing != nil {
-		return fmt.Errorf("affinitygroup %s already exists in CloudStack (id=%s); updates are not supported", name, existing.Id)
+		return "", fmt.Errorf("affinitygroup %s already exists in CloudStack (id=%s); updates are not supported", name, existing.Id)
 	}
 
 	// Create
 	if ag.Spec.Type == "" {
-		return fmt.Errorf("affinitygroup spec.type is required for creation")
+		return "", fmt.Errorf("affinitygroup spec.type is required for creation")
 	}
 	p := client.AffinityGroup.NewCreateAffinityGroupParams(name, ag.Spec.Type)
-	if _, err := client.AffinityGroup.CreateAffinityGroup(p); err != nil {
-		return fmt.Errorf("failed to create affinity group: %w", err)
+	resp, err := client.AffinityGroup.CreateAffinityGroup(p)
+	if err != nil {
+		return "", fmt.Errorf("failed to create affinity group: %w", err)
 	}
-	log.Printf("Created AffinityGroup %s", name)
-	return nil
+	return resp.Id, nil
 }
 
 // ListAffinityGroups lists affinity groups in CloudStack.
@@ -95,23 +95,23 @@ func ResolveAffinityGroup(name string) (string, error) {
 }
 
 // DeleteAffinityGroup deletes an affinity group by name.
-func DeleteAffinityGroup(name string) error {
+func DeleteAffinityGroup(name string) (string, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	existing, _, err := client.AffinityGroup.GetAffinityGroupByName(name)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return "", fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if existing == nil {
-		return fmt.Errorf("affinity group %s not found", name)
+		return "", fmt.Errorf("affinity group %s not found", name)
 	}
 	dp := client.AffinityGroup.NewDeleteAffinityGroupParams()
 	dp.SetId(existing.Id)
 	if _, err := client.AffinityGroup.DeleteAffinityGroup(dp); err != nil {
-		return fmt.Errorf("failed to delete affinity group %s: %w", name, err)
+		return "", fmt.Errorf("failed to delete affinity group %s: %w", name, err)
 	}
 	log.Printf("AffinityGroup %s deleted from CloudStack (id=%s)", name, existing.Id)
-	return nil
+	return existing.Id, nil
 }

@@ -81,6 +81,7 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 
 	kind, _ := meta["kind"].(string)
 	var applyErr error
+	var appliedID string
 
 	switch kind {
 	case "VirtualMachineSpec":
@@ -161,7 +162,10 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 		}
 		applyErr = c.applyVM(&vm)
 	case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData":
-		applyErr = handlers.ApplyCloudStackResource(body)
+		appliedID, applyErr = handlers.ApplyCloudStackResource(body)
+		if applyErr == nil && appliedID != "" {
+			log.Printf("Applied %s id=%s", kind, appliedID)
+		}
 	default:
 		http.Error(w, "unsupported kind", http.StatusBadRequest)
 		return
@@ -173,9 +177,17 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build response including created/applied resource id when available
+	respMap := map[string]string{"status": "success", "message": "resource accepted for reconciliation"}
+	if appliedID != "" {
+		respMap["id"] = appliedID
+		respMap["kind"] = kind
+		respMap["message"] = "resource applied"
+	}
+	b, _ := json.Marshal(respMap)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"success","message":"resource accepted for reconciliation"}`))
+	w.Write(b)
 }
 
 func (c *Controller) handleReconcile(w http.ResponseWriter, r *http.Request) {
@@ -537,6 +549,25 @@ func (c *Controller) handleDelete(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"deleted"}`))
 		return
+	case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData", "Template", "Snapshot":
+		// Delegate deletes of unmanaged CloudStack resources to handlers
+		if id, err := handlers.DeleteCloudStackResource(body); err != nil {
+			http.Error(w, fmt.Sprintf("failed to delete %s: %v", kind, err), http.StatusInternalServerError)
+			return
+		} else {
+			if id != "" {
+				log.Printf("Deleted %s id=%s", kind, id)
+			}
+			respMap := map[string]string{"status": "deleted"}
+			if id != "" {
+				respMap["id"] = id
+				respMap["kind"] = kind
+			}
+			b, _ := json.Marshal(respMap)
+			w.WriteHeader(http.StatusOK)
+			w.Write(b)
+			return
+		}
 	default:
 		http.Error(w, "unsupported kind for delete", http.StatusBadRequest)
 		return
@@ -554,19 +585,41 @@ func (c *Controller) Apply(resource interface{}) error {
 		return c.applyVMSpec(res)
 	case *v1.VirtualMachine:
 		// Default to immediate apply for VirtualMachine resources
-		return handlers.ApplyVirtualMachineManaged(res, true)
+		_, err := handlers.ApplyVirtualMachineManaged(res, true)
+		if err != nil {
+			return err
+		}
+		return nil
 	case *v1.Network:
-		return handlers.ApplyNetwork(res)
+		if _, err := handlers.ApplyNetwork(res); err != nil {
+			return err
+		}
+		return nil
 	case *v1.Volume:
-		return handlers.ApplyVolume(res)
+		if _, err := handlers.ApplyVolume(res); err != nil {
+			return err
+		}
+		return nil
 	case *v1.SSHKey:
-		return handlers.ApplySSHKey(res)
+		if _, err := handlers.ApplySSHKey(res); err != nil {
+			return err
+		}
+		return nil
 	case *v1.SecurityGroup:
-		return handlers.ApplySecurityGroup(res)
+		if _, err := handlers.ApplySecurityGroup(res); err != nil {
+			return err
+		}
+		return nil
 	case *v1.AffinityGroup:
-		return handlers.ApplyAffinityGroup(res)
+		if _, err := handlers.ApplyAffinityGroup(res); err != nil {
+			return err
+		}
+		return nil
 	case *v1.UserData:
-		return handlers.ApplyUserData(res)
+		if _, err := handlers.ApplyUserData(res); err != nil {
+			return err
+		}
+		return nil
 	default:
 		return logError("Unsupported resource type: %T", res)
 	}

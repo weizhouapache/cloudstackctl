@@ -259,8 +259,13 @@ func (c *Controller) createComponentVMs(comp *v1.Component, compRef v1.Component
 			return err
 		}
 
-		if err := handlers.ApplyVirtualMachineManaged(vm, true); err != nil {
+		if id, err := handlers.ApplyVirtualMachineManaged(vm, true); err != nil {
 			return err
+		} else {
+			if id != "" {
+				vm.Status.CloudStackID = id
+				db.DB.Save(vm)
+			}
 		}
 	}
 

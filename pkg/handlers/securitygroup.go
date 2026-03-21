@@ -43,38 +43,38 @@ func DescribeSecurityGroup(name string) (any, error) {
 }
 
 // DeleteSecurityGroup deletes a security group by name.
-func DeleteSecurityGroup(name string) error {
+func DeleteSecurityGroup(name string) (string, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	sg, _, err := client.SecurityGroup.GetSecurityGroupByName(name)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return "", fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if sg == nil {
-		return fmt.Errorf("security group %s not found", name)
+		return "", fmt.Errorf("security group %s not found", name)
 	}
 	dp := client.SecurityGroup.NewDeleteSecurityGroupParams()
 	dp.SetId(sg.Id)
 	if _, err := client.SecurityGroup.DeleteSecurityGroup(dp); err != nil {
-		return fmt.Errorf("failed to delete security group %s: %w", name, err)
+		return "", fmt.Errorf("failed to delete security group %s: %w", name, err)
 	}
 	log.Printf("Security group %s deleted from CloudStack (id=%s)", name, sg.Id)
-	return nil
+	return sg.Id, nil
 }
 
 // ApplySecurityGroup ensures a security group exists in CloudStack. If the
 // security group exists this is a no-op. Creating full security groups from
 // controller currently requires more spec detail; return an informative error.
-func ApplySecurityGroup(sg *v1.SecurityGroup) error {
+func ApplySecurityGroup(sg *v1.SecurityGroup) (string, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	existing, _, err := client.SecurityGroup.GetSecurityGroupByName(sg.Metadata.Name)
 	if existing != nil {
-		return fmt.Errorf("securitygroup %s already exists in CloudStack (id=%s); updates are not supported", sg.Metadata.Name, existing.Id)
+		return "", fmt.Errorf("securitygroup %s already exists in CloudStack (id=%s); updates are not supported", sg.Metadata.Name, existing.Id)
 	}
 	// Create security group with optional description from metadata.annotations["description"]
 	p := client.SecurityGroup.NewCreateSecurityGroupParams(sg.Metadata.Name)
@@ -83,11 +83,11 @@ func ApplySecurityGroup(sg *v1.SecurityGroup) error {
 			p.SetDescription(d)
 		}
 	}
-	if _, err := client.SecurityGroup.CreateSecurityGroup(p); err != nil {
-		return fmt.Errorf("failed to create security group: %w", err)
+	resp, err := client.SecurityGroup.CreateSecurityGroup(p)
+	if err != nil {
+		return "", fmt.Errorf("failed to create security group: %w", err)
 	}
-	log.Printf("Created SecurityGroup %s", sg.Metadata.Name)
-	return nil
+	return resp.Id, nil
 }
 
 // ResolveSecurityGroup returns the CloudStack security group ID for a given name.

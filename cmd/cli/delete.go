@@ -56,15 +56,21 @@ var deleteCmd = &cobra.Command{
 				if resourceType == "Application" || resourceType == "Component" || resourceType == "VirtualMachineSpec" {
 					log.Fatalf("'%s' is not supported in standalone mode", resourceType)
 				}
-				if err := handlers.DeleteCloudStackResource(rawPayload); err != nil {
+				if id, err := handlers.DeleteCloudStackResource(rawPayload); err != nil {
 					log.Fatalf("Local delete failed: %v", err)
+				} else {
+					if id != "" {
+						log.Printf("Deleted %s id=%s", resourceType, id)
+					}
 				}
 				return
 			}
 
 			// Cluster mode: send delete request to controller
-			if _, err := ControllerRequest("POST", "/delete", rawPayload); err != nil {
+			if body, err := ControllerRequest("POST", "/delete", rawPayload); err != nil {
 				log.Fatalf("Controller delete failed: %v", err)
+			} else {
+				log.Printf("Controller response for %s: %s", resourceType, string(body))
 			}
 			return
 		}
@@ -83,15 +89,21 @@ var deleteCmd = &cobra.Command{
 			if resourceType == "Application" || resourceType == "Component" || resourceType == "VirtualMachineSpec" {
 				log.Fatalf("'%s' is not supported in standalone mode", resourceType)
 			}
-			if err := handlers.DeleteCloudStackResource(rawPayload); err != nil {
+			if id, err := handlers.DeleteCloudStackResource(rawPayload); err != nil {
 				log.Fatalf("Local delete failed: %v", err)
+			} else {
+				if id != "" {
+					log.Printf("Deleted %s id=%s", resourceType, id)
+				}
 			}
 			return
 		}
 
 		// Cluster mode: instruct controller to delete the resource
-		if _, err := ControllerRequest("POST", "/delete", rawPayload); err != nil {
+		if body, err := ControllerRequest("POST", "/delete", rawPayload); err != nil {
 			log.Fatalf("Controller delete failed: %v", err)
+		} else {
+			log.Printf("Controller response for %s: %s", resourceType, string(body))
 		}
 	},
 }

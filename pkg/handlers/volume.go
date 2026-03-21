@@ -45,44 +45,45 @@ func DescribeVolume(name string) (any, error) {
 	return resp.Volumes[0], nil
 }
 
-// DeleteVolume deletes a volume by name.
-func DeleteVolume(name string) error {
+// DeleteVolume deletes a volume by name and returns the deleted CloudStack ID.
+func DeleteVolume(name string) (string, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Volume.NewListVolumesParams()
 	params.SetName(name)
 	resp, err := client.Volume.ListVolumes(params)
 	if err != nil {
-		return fmt.Errorf("cloudstack API error: %w", err)
+		return "", fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp == nil || len(resp.Volumes) == 0 {
-		return fmt.Errorf("volume %s not found", name)
+		return "", fmt.Errorf("volume %s not found", name)
 	}
 	vid := resp.Volumes[0].Id
 	dp := client.Volume.NewDeleteVolumeParams(vid)
 	if _, err := client.Volume.DeleteVolume(dp); err != nil {
-		return fmt.Errorf("failed to delete volume %s: %w", name, err)
+		return "", fmt.Errorf("failed to delete volume %s: %w", name, err)
 	}
 	log.Printf("Volume %s deleted from CloudStack (id=%s)", name, vid)
-	return nil
+	return vid, nil
 }
 
 // ApplyVolume attempts to ensure a Volume exists in CloudStack. For now
 // the controller supports discovery (no-op if present) but does not perform
 // full standalone creation of volumes (creation requires more spec fields).
-func ApplyVolume(vol *v1.Volume) error {
+// Returns the created Volume ID when applicable.
+func ApplyVolume(vol *v1.Volume) (string, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	// Try discovery first
 	params := client.Volume.NewListVolumesParams()
 	params.SetName(vol.Metadata.Name)
 	resp, err := client.Volume.ListVolumes(params)
 	if err == nil && resp != nil && len(resp.Volumes) > 0 {
-		return fmt.Errorf("volume %s already exists in CloudStack (id=%s); updates are not supported", vol.Metadata.Name, resp.Volumes[0].Id)
+		return "", fmt.Errorf("volume %s already exists in CloudStack (id=%s); updates are not supported", vol.Metadata.Name, resp.Volumes[0].Id)
 	}
 
 	// If spec has disk offering and size, attempt creation
@@ -102,25 +103,24 @@ func ApplyVolume(vol *v1.Volume) error {
 		if vol.Spec.Zone != "" {
 			zid, zerr := ResolveZone(vol.Spec.Zone)
 			if zerr != nil {
-				return fmt.Errorf("failed to resolve zone %s: %w", vol.Spec.Zone, zerr)
+				return "", fmt.Errorf("failed to resolve zone %s: %w", vol.Spec.Zone, zerr)
 			}
 			cp.SetZoneid(zid)
 		}
 		resp, err := client.Volume.CreateVolume(cp)
 		if err != nil {
-			return fmt.Errorf("failed to create volume: %w", err)
+			return "", fmt.Errorf("failed to create volume: %w", err)
 		}
 		if resp != nil {
 			msg := fmt.Sprintf("Volume \"%s\" (ID: %s) has been created", vol.Metadata.Name, resp.Id)
 			log.Println(msg)
-			fmt.Println(msg)
-		} else {
-			log.Printf("Requested creation of Volume %s", vol.Metadata.Name)
+			return resp.Id, nil
 		}
-		return nil
+		log.Printf("Requested creation of Volume %s", vol.Metadata.Name)
+		return "", nil
 	}
 
-	return fmt.Errorf("creating Volume from controller requires spec.diskOffering and spec.size; use CLI standalone if you need immediate creation")
+	return "", fmt.Errorf("creating Volume from controller requires spec.diskOffering and spec.size; use CLI standalone if you need immediate creation")
 }
 
 // ResolveVolume returns the CloudStack volume ID for a given volume name.

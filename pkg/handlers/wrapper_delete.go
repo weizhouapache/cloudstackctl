@@ -8,10 +8,10 @@ import (
 // DeleteCloudStackResource deletes an unmanaged CloudStack resource based on
 // a raw JSON payload containing `kind` and `name` (or metadata.name).
 // This wrapper is for standalone CLI mode.
-func DeleteCloudStackResource(raw []byte) error {
+func DeleteCloudStackResource(raw []byte) (string, error) {
 	var meta map[string]interface{}
 	if err := json.Unmarshal(raw, &meta); err != nil {
-		return fmt.Errorf("invalid resource JSON: %w", err)
+		return "", fmt.Errorf("invalid resource JSON: %w", err)
 	}
 
 	kind, _ := meta["kind"].(string)
@@ -26,29 +26,65 @@ func DeleteCloudStackResource(raw []byte) error {
 	}
 
 	if name == "" {
-		return fmt.Errorf("missing name for delete operation")
+		return "", fmt.Errorf("missing name for delete operation")
 	}
 
 	switch kind {
 	case "VirtualMachine":
-		return DeleteVM(name)
+		id, err := DeleteVM(name)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
 	case "Network":
-		return DeleteNetwork(name)
+		id, err := DeleteNetwork(name)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
 	case "Volume":
-		return DeleteVolume(name)
+		id, err := DeleteVolume(name)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
 	case "SSHKey":
-		return DeleteSSHKey(name)
+		id, err := DeleteSSHKey(name)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
 	case "SecurityGroup":
-		return DeleteSecurityGroup(name)
+		id, err := DeleteSecurityGroup(name)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
 	case "AffinityGroup":
-		return DeleteAffinityGroup(name)
+		id, err := DeleteAffinityGroup(name)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
 	case "Template":
-		return DeleteTemplate(name)
+		id, err := DeleteTemplate(name)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
 	case "Snapshot":
-		return DeleteSnapshot(name)
+		id, err := DeleteSnapshot(name)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
 	case "UserData":
-		return DeleteUserData(name)
+		id, err := DeleteUserData(name)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
 	default:
-		return fmt.Errorf("unsupported resource kind for standalone delete: %s", kind)
+		return "", fmt.Errorf("unsupported resource kind for standalone delete: %s", kind)
 	}
 }
