@@ -3,6 +3,7 @@ kind: VirtualMachineSpec
 metadata:
   name: backend-vmspec
 spec:
+  zone: zone-1
   template: my-template
   serviceOffering: small
   networks:

@@ -199,9 +199,13 @@ func PrintVMSpecs(specs []v1.VirtualMachineSpecResource) {
 				nets += "," + s.Spec.Networks[i]
 			}
 		}
-		volCount := 0
+		volCount := 1
 		if len(s.Spec.Volumes) > 0 {
-			volCount = len(s.Spec.Volumes)
+			for _, vs := range s.Spec.Volumes {
+				if vs.Type == "data" {
+					volCount++
+				}
+			}
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\n", s.Metadata.Name, tmpl, so, nets, volCount)
 	}
