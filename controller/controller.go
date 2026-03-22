@@ -714,7 +714,22 @@ func (c *Controller) applyComponent(comp *v1.Component) error {
 		comp.Status.Ready = false
 		comp.Status.LastChecked = time.Now()
 	}
-	// Persist desired component with effective spec (if present)
+	// Resolve base VM spec (by reference or inline) and compute effective spec
+	var base v1.VirtualMachineSpec
+	if comp.Spec.VirtualMachineSpec != "" {
+		var vsr v1.VirtualMachineSpecResource
+		if err := db.DB.Where("name = ?", comp.Spec.VirtualMachineSpec).First(&vsr).Error; err == nil {
+			base = vsr.Spec
+		}
+	} else {
+		// if no referenced spec, allow inline EffectiveSpec to be used as base
+		base = comp.EffectiveSpec
+	}
+
+	effective := mergeVMSpec(base, comp.Spec.Overrides)
+	comp.EffectiveSpec = effective
+
+	// Persist desired component with effective spec
 	return db.DB.Save(comp).Error
 }
 

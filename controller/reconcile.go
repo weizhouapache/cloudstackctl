@@ -470,5 +470,18 @@ func mergeVMSpec(base v1.VirtualMachineSpec, ov v1.ComponentOverrides) v1.Virtua
 		}
 	}
 
+	// Override template and service offering if provided
+	if ov.Template != "" {
+		out.Template = ov.Template
+	}
+	if ov.ServiceOffering != "" {
+		out.ServiceOffering = ov.ServiceOffering
+	}
+
+	// Override volumes if provided (replace)
+	if len(ov.Volumes) > 0 {
+		out.Volumes = ov.Volumes
+	}
+
 	return out
 }

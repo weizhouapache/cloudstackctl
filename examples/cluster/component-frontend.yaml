@@ -3,8 +3,12 @@ kind: Component
 metadata:
   name: frontend
 spec:
-  vmSpec:
-    name: frontend-vmspec
-  template: my-template
-  serviceOffering: small
-  count: 2
+  virtualMachineSpec: frontend-vmspec
+  replicas: 2
+  overrides:
+    template: my-template
+    serviceOffering: small
+  healthChecks:
+    - type: ping
+      interval: 10s
+      timeout: 5s

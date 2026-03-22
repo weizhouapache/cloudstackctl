@@ -81,10 +81,13 @@ type ComponentSpec struct {
 
 // ComponentOverrides allows limited, safe overrides to a reused VM spec
 type ComponentOverrides struct {
-	UserDataRefs   []string `json:"userDataRefs,omitempty" yaml:"userDataRefs,omitempty" gorm:"serializer:json"`
-	SSHKeys        []string `json:"sshKeys,omitempty" yaml:"sshKeys,omitempty" gorm:"serializer:json"`
-	SecurityGroups []string `json:"securityGroups,omitempty" yaml:"securityGroups,omitempty" gorm:"serializer:json"`
-	AffinityGroups []string `json:"affinityGroups,omitempty" yaml:"affinityGroups,omitempty" gorm:"serializer:json"`
+	Template        string       `json:"template,omitempty" yaml:"template,omitempty"`
+	ServiceOffering string       `json:"serviceOffering,omitempty" yaml:"serviceOffering,omitempty"`
+	Volumes         []VolumeSpec `json:"volumes,omitempty" yaml:"volumes,omitempty" gorm:"serializer:json"`
+	UserDataRefs    []string     `json:"userDataRefs,omitempty" yaml:"userDataRefs,omitempty" gorm:"serializer:json"`
+	SSHKeys         []string     `json:"sshKeys,omitempty" yaml:"sshKeys,omitempty" gorm:"serializer:json"`
+	SecurityGroups  []string     `json:"securityGroups,omitempty" yaml:"securityGroups,omitempty" gorm:"serializer:json"`
+	AffinityGroups  []string     `json:"affinityGroups,omitempty" yaml:"affinityGroups,omitempty" gorm:"serializer:json"`
 }
 
 // VirtualMachine represents an individual VM instance in CloudStack

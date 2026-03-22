@@ -175,12 +175,13 @@ func PrintVMsFromDB(vms []v1.VirtualMachine) {
 // PrintComponents prints components returned by the controller DB query.
 func PrintComponents(comps []v1.Component) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tREPLICAS\tVM SPEC\tOBSERVED REPLICAS")
+	fmt.Fprintln(w, "NAME\tREPLICAS\tVM SPEC\tSTATE\tOBSERVED REPLICAS")
 	for _, c := range comps {
 		replicas := c.Spec.Replicas
 		vmSpec := c.Spec.VirtualMachineSpec
 		observed := c.ObservedReplicas
-		fmt.Fprintf(w, "%s\t%d\t%s\t%d\n", c.Metadata.Name, replicas, vmSpec, observed)
+		state := c.Status.ObservedState
+		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%d\n", c.Metadata.Name, replicas, vmSpec, state, observed)
 	}
 	w.Flush()
 }
