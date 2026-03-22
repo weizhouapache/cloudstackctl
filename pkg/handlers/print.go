@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
+	"cloudstackctl/db"
 
 	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 )
@@ -148,7 +149,7 @@ func PrintNetworks(nets []*cs.Network) {
 // PrintVMsFromDB prints VMs returned by the controller DB query.
 func PrintVMsFromDB(vms []v1.VirtualMachine) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS\tREADY\tDRIFT")
+	fmt.Fprintln(w, "NAME\tAPPLICATION\tCOMPONENT\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS\tREADY\tDRIFT")
 	for _, vm := range vms {
 		id := vm.CloudStackID
 		tmpl := vm.Spec.Template
@@ -159,8 +160,10 @@ func PrintVMsFromDB(vms []v1.VirtualMachine) {
 		if so == "" && vm.ObservedSpec.ServiceOffering != "" {
 			so = vm.ObservedSpec.ServiceOffering
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\t%t\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%t\n",
 			vm.Metadata.Name,
+			vm.Application,
+			vm.Component,
 			id,
 			tmpl,
 			so,
@@ -175,13 +178,31 @@ func PrintVMsFromDB(vms []v1.VirtualMachine) {
 // PrintComponents prints components returned by the controller DB query.
 func PrintComponents(comps []v1.Component) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tREPLICAS\tVM SPEC\tSTATE\tOBSERVED REPLICAS")
+	fmt.Fprintln(w, "NAME\tAPPLICATION\tREPLICAS\tVM SPEC\tSTATE\tOBSERVED REPLICAS")
+
+	// Build component -> applications map for display
+	var apps []v1.Application
+	appMap := map[string]string{}
+	if db.DB != nil {
+		if err := db.DB.Find(&apps).Error; err == nil {
+			for _, a := range apps {
+				for _, cref := range a.Spec.Components {
+					if appMap[cref.Name] == "" {
+						appMap[cref.Name] = a.Metadata.Name
+					} else {
+						appMap[cref.Name] = appMap[cref.Name] + "," + a.Metadata.Name
+					}
+				}
+			}
+		}
+	}
 	for _, c := range comps {
 		replicas := c.Spec.Replicas
 		vmSpec := c.Spec.VirtualMachineSpec
 		observed := c.ObservedReplicas
 		state := c.Status.ObservedState
-		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%d\n", c.Metadata.Name, replicas, vmSpec, state, observed)
+		appNames := appMap[c.Metadata.Name]
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%d\n", c.Metadata.Name, appNames, replicas, vmSpec, state, observed)
 	}
 	w.Flush()
 }
@@ -216,7 +237,7 @@ func PrintVMSpecs(specs []v1.VirtualMachineSpecResource) {
 // PrintApplications prints applications returned by the controller DB query.
 func PrintApplications(apps []v1.Application) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tCOMPONENTS\tPROJECT")
+	fmt.Fprintln(w, "NAME\tCOMPONENTS\tPROJECT\tSTATE\tREADY")
 	for _, a := range apps {
 		compNames := ""
 		if len(a.Spec.Components) > 0 {
@@ -226,7 +247,7 @@ func PrintApplications(apps []v1.Application) {
 			}
 		}
 		project := a.Spec.Project
-		fmt.Fprintf(w, "%s\t%s\t%s\n", a.Metadata.Name, compNames, project)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%t\n", a.Metadata.Name, compNames, project, a.Status.ObservedState, a.Status.Ready)
 	}
 	w.Flush()
 }

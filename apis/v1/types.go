@@ -46,6 +46,11 @@ type ComponentRef struct {
 	VirtualMachineSpec string        `json:"virtualMachineSpec" yaml:"virtualMachineSpec"` // Reusable VM spec name
 	Replicas           int           `json:"replicas" yaml:"replicas"`                     // Number of VM replicas
 	HealthChecks       []HealthCheck `json:"healthChecks,omitempty" yaml:"healthChecks,omitempty" gorm:"serializer:json"`
+	// DependsOn lists component names this component depends on. If set,
+	// the reconciler will wait for the named components to be healthy
+	// before creating or reconciling this component. Values may be a
+	// comma-separated string when provided in YAML/JSON.
+	DependsOn string `json:"dependsOn,omitempty" yaml:"dependsOn,omitempty"`
 }
 
 // HealthCheck defines a simple health check configuration for VMs
@@ -65,6 +70,8 @@ type Component struct {
 	Metadata   Metadata      `json:"metadata" yaml:"metadata" gorm:"embedded"`
 	Spec       ComponentSpec `json:"spec" yaml:"spec" gorm:"embedded"`
 	Status     Status        `json:"status,omitempty" gorm:"embedded"`
+	// Application links this Component to a parent Application (store application name or id)
+	Application string `json:"application,omitempty" yaml:"application,omitempty" gorm:"column:application"`
 	// EffectiveSpec stores the resolved VM spec after merging overrides (persisted for visibility)
 	EffectiveSpec VirtualMachineSpec `json:"effectiveSpec,omitempty" yaml:"effectiveSpec,omitempty" gorm:"serializer:json"`
 	// ObservedReplicas tracks how many VMs are currently observed for this component
@@ -73,10 +80,13 @@ type Component struct {
 
 // ComponentSpec defines the desired state of a Component
 type ComponentSpec struct {
-	VirtualMachineSpec string             `json:"virtualMachineSpec" yaml:"virtualMachineSpec"` // Reusable VM spec name
-	Replicas           int                `json:"replicas" yaml:"replicas"`                     // Number of VM replicas
-	Overrides          ComponentOverrides `json:"overrides,omitempty" yaml:"overrides,omitempty" gorm:"serializer:json"`
-	HealthChecks       []HealthCheck      `json:"healthChecks,omitempty" yaml:"healthChecks,omitempty" gorm:"serializer:json"`
+	VirtualMachineSpec string `json:"virtualMachineSpec" yaml:"virtualMachineSpec"` // Reusable VM spec name
+	Replicas           int    `json:"replicas" yaml:"replicas"`                     // Number of VM replicas
+	// MinHealthy defines the minimum number of healthy VMs required for the
+	// component to be considered healthy. If zero, defaults to `Replicas`.
+	MinHealthy   int                `json:"minHealthy,omitempty" yaml:"minHealthy,omitempty"`
+	Overrides    ComponentOverrides `json:"overrides,omitempty" yaml:"overrides,omitempty" gorm:"serializer:json"`
+	HealthChecks []HealthCheck      `json:"healthChecks,omitempty" yaml:"healthChecks,omitempty" gorm:"serializer:json"`
 }
 
 // ComponentOverrides allows limited, safe overrides to a reused VM spec
@@ -100,10 +110,10 @@ type VirtualMachine struct {
 	Status     Status             `json:"status,omitempty" gorm:"embedded"`
 	// ObservedSpec stores the configuration fetched from CloudStack (observed state)
 	ObservedSpec VirtualMachineSpec `json:"observedSpec,omitempty" yaml:"observedSpec,omitempty" gorm:"serializer:json"`
-	// ApplicationID links this VM to a parent Application (store application name or id)
-	ApplicationID string `json:"applicationId,omitempty" yaml:"applicationId,omitempty" gorm:"column:application_id"`
-	// ComponentID links this VM to a parent Component (store component name or id)
-	ComponentID string `json:"componentId,omitempty" yaml:"componentId,omitempty" gorm:"column:component_id"`
+	// Application links this VM to a parent Application (store application name or id)
+	Application string `json:"application,omitempty" yaml:"application,omitempty" gorm:"column:application"`
+	// Component links this VM to a parent Component (store component name or id)
+	Component string `json:"component,omitempty" yaml:"component,omitempty" gorm:"column:component"`
 	// CloudStackID is the external provider ID for this VM in CloudStack
 	CloudStackID string `json:"cloudStackId,omitempty" yaml:"cloudStackId,omitempty" gorm:"column:cloudstack_id"`
 }

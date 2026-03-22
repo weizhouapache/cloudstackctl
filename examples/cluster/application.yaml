@@ -5,6 +5,5 @@ metadata:
 spec:
   components:
     - name: frontend
-      replicas: 2
+      dependsOn: backend
     - name: backend
-      replicas: 1

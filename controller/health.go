@@ -25,41 +25,64 @@ func fmtTimeoutSeconds(d time.Duration) string {
 func (c *Controller) CheckComponentHealth(component *v1.Component) (bool, error) {
 	log.Printf("Checking health for component: %s", component.Metadata.Name)
 
-	// Get all VMs in component
+	// Get all VMs in component by matching the `component` column which stores
+	// the owning component name. This is more reliable than depending on
+	// labels JSON content.
 	var vms []v1.VirtualMachine
-	if err := db.DB.Where("metadata_labels @> ?", map[string]string{"component": component.Metadata.Name}).Find(&vms).Error; err != nil {
+	if err := db.DB.Where("component = ?", component.Metadata.Name).Find(&vms).Error; err != nil {
 		return false, err
 	}
 
-	// Check each VM health
-	allHealthy := true
+	// Check each VM health. Skip VMs that are already marked Removing.
+	healthyCount := 0
 	for _, vm := range vms {
+		if vm.Status.ObservedState == "Removing" {
+			log.Printf("Skipping health check for VM %s: state=Removing", vm.Metadata.Name)
+			continue
+		}
 		healthy, err := c.CheckVMHealth(&vm)
 		if err != nil {
 			log.Printf("VM %s health check failed: %v", vm.Metadata.Name, err)
-			allHealthy = false
 			continue
 		}
-
-		if !healthy {
-			allHealthy = false
+		if healthy {
+			healthyCount++
 		}
 	}
 
-	// Update component status
-	component.Status.Ready = allHealthy
-	component.Status.LastChecked = time.Now()
-	if allHealthy {
-		component.Status.ObservedState = "Healthy"
-	} else {
-		component.Status.ObservedState = "Unhealthy"
+	// Determine required minimum healthy VMs (default to replicas)
+	req := component.Spec.MinHealthy
+	if req <= 0 {
+		req = component.Spec.Replicas
 	}
 
-	return allHealthy, db.DB.Save(component).Error
+	isHealthy := healthyCount >= req
+
+	// Update component status, but do not overwrite if component is marked Removing.
+	if component.Status.ObservedState != "Removing" {
+		component.Status.Ready = isHealthy
+		component.Status.LastChecked = time.Now()
+		if isHealthy {
+			component.Status.ObservedState = "Healthy"
+		} else {
+			component.Status.ObservedState = "Unhealthy"
+		}
+		// log the health status for visibility
+		log.Printf("Component %s health check: %d/%d healthy (required: %d)", component.Metadata.Name, healthyCount, len(vms), req)
+		return isHealthy, db.DB.Save(component).Error
+	}
+	// If component is Removing, only update LastChecked timestamp
+	component.Status.LastChecked = time.Now()
+	return isHealthy, db.DB.Save(component).Error
 }
 
 // CheckVMHealth performs ping/SSH health check for a VM
 func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
+	// If VM is marked Removing, do not update state during health checks.
+	if vm.Status.ObservedState == "Removing" {
+		return false, nil
+	}
+
 	// Skip if VM not created in CloudStack
 	if vm.CloudStackID == "" {
 		return false, nil
@@ -76,6 +99,7 @@ func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
 	}
 	if resp == nil || len(resp.VirtualMachines) == 0 {
 		log.Printf("no CloudStack VM found for %s (id=%s)", vm.Metadata.Name, vm.CloudStackID)
+		vm.Status.ObservedState = "VMNotFound"
 		vm.Status.Ready = false
 		vm.Status.LastChecked = time.Now()
 		return false, db.DB.Save(vm).Error
@@ -91,17 +115,32 @@ func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
 			break
 		}
 	}
-	if vmIP == "" {
-		log.Printf("no IP address found for VM %s (id=%s)", vm.Metadata.Name, vm.CloudStackID)
-		vm.Status.Ready = false
-		vm.Status.LastChecked = time.Now()
-		return false, db.DB.Save(vm).Error
-	}
 
 	// Determine health checks to run: use Spec.HealthChecks if present, otherwise return healthy (no checks to run)
 	checks := vm.Spec.HealthChecks
+	// If no checks defined, fall back to component health checks if VM is part of a component
+	if len(checks) == 0 && vm.Component != "" {
+		var comp v1.Component
+		if err := db.DB.Where("name = ?", vm.Component).First(&comp).Error; err == nil {
+			checks = comp.Spec.HealthChecks
+		}
+	}
+
+	// If still no checks defined, consider the VM healthy if it has an IP and is running in CloudStack.
 	if len(checks) == 0 {
-		return true, nil
+		log.Printf("Health check passed for VM %s (id=%s): no health checks defined, defaulting to healthy", vm.Metadata.Name, vm.CloudStackID)
+		vm.Status.ObservedState = "Healthy"
+		vm.Status.Ready = true
+		vm.Status.LastChecked = time.Now()
+		return true, db.DB.Save(vm).Error
+	}
+
+	if vmIP == "" {
+		log.Printf("no IP address found for VM %s (id=%s)", vm.Metadata.Name, vm.CloudStackID)
+		vm.Status.ObservedState = "IPNotFound"
+		vm.Status.Ready = false
+		vm.Status.LastChecked = time.Now()
+		return false, db.DB.Save(vm).Error
 	}
 
 	overallHealthy := true
@@ -144,13 +183,18 @@ func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
 		}
 	}
 
-	vm.Status.Ready = overallHealthy
-	vm.Status.LastChecked = time.Now()
-	if overallHealthy {
-		vm.Status.ObservedState = "Healthy"
-	} else {
-		vm.Status.ObservedState = "Unhealthy"
+	// Only update ObservedState if VM is not marked Removing.
+	if vm.Status.ObservedState != "Removing" {
+		vm.Status.Ready = overallHealthy
+		vm.Status.LastChecked = time.Now()
+		if overallHealthy {
+			vm.Status.ObservedState = "Healthy"
+		} else {
+			vm.Status.ObservedState = "Unhealthy"
+		}
+		return overallHealthy, db.DB.Save(vm).Error
 	}
-
+	// If Removing, only update LastChecked timestamp
+	vm.Status.LastChecked = time.Now()
 	return overallHealthy, db.DB.Save(vm).Error
 }

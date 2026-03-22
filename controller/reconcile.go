@@ -15,21 +15,25 @@ import (
 func (c *Controller) ReconcileAll() {
 	log.Println("Starting reconciliation loop")
 
-	// Reconcile Applications (ignore those marked Removing)
+	// Manage per-application workers: start a worker for each non-removing
+	// application and stop workers for applications that are removed.
 	var apps []v1.Application
-	if err := db.DB.Where("deleted_at IS NULL AND observed_state <> ?", "Removing").Find(&apps).Error; err != nil {
+	if err := db.DB.Find(&apps).Error; err != nil {
 		log.Printf("Failed to list applications: %v", err)
 		return
 	}
-
 	for _, app := range apps {
-		if err := c.ReconcileApplication(&app); err != nil {
-			log.Printf("Failed to reconcile application %s: %v", app.Metadata.Name, err)
+		if app.Status.ObservedState == "Removing" {
+			// ensure worker stopped for removing apps
+			c.stopAppWorker(app.Metadata.Name)
+			continue
 		}
+		// start a worker if not present
+		c.startAppWorker(app.Metadata.Name)
 	}
-	// Reconcile VMs (ignore those marked Removing)
+	// Reconcile VMs that are not part of any application or component.
 	var vms []v1.VirtualMachine
-	if err := db.DB.Where("deleted_at IS NULL AND observed_state <> ?", "Removing").Find(&vms).Error; err != nil {
+	if err := db.DB.Where("deleted_at IS NULL AND observed_state <> ? AND (application IS NULL OR application = '') AND (component IS NULL OR component = '')", "Removing").Find(&vms).Error; err != nil {
 		log.Printf("Failed to list VMs: %v", err)
 		return
 	}
@@ -38,87 +42,6 @@ func (c *Controller) ReconcileAll() {
 		if err := c.ReconcileVM(&vm); err != nil {
 			log.Printf("Failed to reconcile VM %s: %v", vm.Metadata.Name, err)
 		}
-	}
-
-	// After normal reconciliation, process removals in order: VMs -> Components -> Applications
-	// 1) VMs marked Removing
-	var removingVMs []v1.VirtualMachine
-	if err := db.DB.Where("observed_state = ?", "Removing").Find(&removingVMs).Error; err != nil {
-		log.Printf("Failed to list removing VMs: %v", err)
-	} else {
-		for _, vm := range removingVMs {
-			log.Printf("Removing VM: %s", vm.Metadata.Name)
-			if vm.CloudStackID != "" {
-				dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.CloudStackID)
-				dp.SetExpunge(true)
-				c.csClient.VirtualMachine.DestroyVirtualMachine(dp)
-			}
-			db.DB.Delete(&vm)
-		}
-	}
-
-	// 2) Components marked Removing
-	var removingComps []v1.Component
-	if err := db.DB.Where("observed_state = ?", "Removing").Find(&removingComps).Error; err != nil {
-		log.Printf("Failed to list removing components: %v", err)
-	} else {
-		for _, comp := range removingComps {
-			// Check if any VMs still reference this component
-			var vmCount int64
-			if err := db.DB.Model(&v1.VirtualMachine{}).Where("component_id = ?", comp.Metadata.Name).Count(&vmCount).Error; err != nil {
-				log.Printf("Failed to count VMs for component %s: %v", comp.Metadata.Name, err)
-				continue
-			}
-			if vmCount > 0 {
-				log.Printf("Skipping deletion of Component %s: %d VMs still exist", comp.Metadata.Name, vmCount)
-				continue
-			}
-			log.Printf("Removing Component: %s", comp.Metadata.Name)
-			db.DB.Delete(&comp)
-		}
-	}
-
-	// Process applications marked for removal: ensure VMs -> Components -> Applications
-	var removingApps []v1.Application
-	if err := db.DB.Where("observed_state = ?", "Removing").Find(&removingApps).Error; err != nil {
-		log.Printf("Failed to list removing applications: %v", err)
-		return
-	}
-	for _, app := range removingApps {
-		log.Printf("Processing removal for application: %s", app.Metadata.Name)
-
-		// Delete VMs that reference this application
-		var appVMs []v1.VirtualMachine
-		if err := db.DB.Where("application_id = ?", app.Metadata.Name).Find(&appVMs).Error; err == nil {
-			for _, vm := range appVMs {
-				if vm.CloudStackID != "" {
-					dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.CloudStackID)
-					dp.SetExpunge(true)
-					c.csClient.VirtualMachine.DestroyVirtualMachine(dp)
-				}
-				db.DB.Delete(&vm)
-			}
-		}
-
-		// Delete component records referenced by application only if no components remain
-		var compNames []string
-		for _, cref := range app.Spec.Components {
-			compNames = append(compNames, cref.Name)
-		}
-		var remaining int64
-		if len(compNames) > 0 {
-			if err := db.DB.Model(&v1.Component{}).Where("name IN ?", compNames).Count(&remaining).Error; err != nil {
-				log.Printf("Failed to count components for application %s: %v", app.Metadata.Name, err)
-				continue
-			}
-		}
-		if remaining > 0 {
-			log.Printf("Skipping deletion of Application %s: %d components still exist", app.Metadata.Name, remaining)
-			continue
-		}
-		// Safe to delete application record
-		db.DB.Delete(&app)
-		log.Printf("Application %s removed", app.Metadata.Name)
 	}
 }
 
@@ -129,7 +52,6 @@ func (c *Controller) ReconcileApplication(app *v1.Application) error {
 		return nil
 	}
 
-	// Resolve component dependencies (health enforcement)
 	return c.ResolveComponentDependencies(app)
 }
 
@@ -148,7 +70,7 @@ func (c *Controller) ReconcileComponent(comp *v1.Component) error {
 
 	if !healthy {
 		// Recreate unhealthy VMs
-		return c.recreateComponentVMs(comp)
+		return c.recreateComponentVMs(comp.Application, comp)
 	}
 
 	// Update observed replica count and persist effective spec if present
@@ -179,6 +101,8 @@ func (c *Controller) ReconcileVM(vm *v1.VirtualMachine) error {
 	// Check if VM exists; if not, create it
 	if vm.CloudStackID == "" {
 		if id, err := handlers.ApplyVirtualMachineManaged(vm, true); err != nil {
+			// Remove VM if creation failed to avoid repeated creation attempts; user can recreate after fixing the issue.
+			db.DB.Delete(vm)
 			return err
 		} else {
 			if id != "" {
@@ -334,15 +258,23 @@ func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 
 // createComponentVMs creates VM replicas for a component
 func (c *Controller) createComponentVMs(appName string, comp *v1.Component, compRef v1.ComponentRef) error {
-	// Load the referenced reusable VM spec
-	var vsr v1.VirtualMachineSpecResource
-	if err := db.DB.Where("name = ?", compRef.VirtualMachineSpec).First(&vsr).Error; err != nil {
-		return fmt.Errorf("virtualMachineSpec %s not found: %w", compRef.VirtualMachineSpec, err)
-	}
-
-	// Merge base spec with component-level overrides
-	base := vsr.Spec
+	// Determine effective VM spec: if the ComponentRef does not reference
+	// a reusable VirtualMachineSpec, use the Component's persisted
+	// EffectiveSpec directly. Otherwise load the referenced spec and merge
+	// component-level overrides.
 	overrides := comp.Spec.Overrides
+
+	var effective v1.VirtualMachineSpec
+	if compRef.VirtualMachineSpec == "" {
+		effective = comp.EffectiveSpec
+	} else {
+		var vsr v1.VirtualMachineSpecResource
+		if err := db.DB.Where("name = ?", compRef.VirtualMachineSpec).First(&vsr).Error; err != nil {
+			return fmt.Errorf("virtualMachineSpec %s not found: %w", compRef.VirtualMachineSpec, err)
+		}
+		base := vsr.Spec
+		effective = mergeVMSpec(base, overrides)
+	}
 
 	for i := 0; i < compRef.Replicas; i++ {
 		vmName := fmt.Sprintf("%s-%d", comp.Metadata.Name, i+1)
@@ -353,8 +285,6 @@ func (c *Controller) createComponentVMs(appName string, comp *v1.Component, comp
 			// VM already present, skip creation
 			continue
 		}
-
-		effective := mergeVMSpec(base, overrides)
 
 		// persist effective spec into the component for visibility
 		comp.EffectiveSpec = effective
@@ -368,11 +298,11 @@ func (c *Controller) createComponentVMs(appName string, comp *v1.Component, comp
 
 		// Link VM to owning application if provided
 		if appName != "" {
-			vm.ApplicationID = appName
+			vm.Application = appName
 		}
 
 		// Link VM to owning component
-		vm.ComponentID = comp.Metadata.Name
+		vm.Component = comp.Metadata.Name
 
 		// Persist desired VM record and create in CloudStack
 		if err := db.DB.Save(vm).Error; err != nil {
@@ -380,6 +310,8 @@ func (c *Controller) createComponentVMs(appName string, comp *v1.Component, comp
 		}
 
 		if id, err := handlers.ApplyVirtualMachineManaged(vm, true); err != nil {
+			// Remove VM if creation failed to avoid repeated creation attempts; user can recreate after fixing the issue.
+			db.DB.Delete(vm)
 			return err
 		} else {
 			if id != "" {
@@ -402,14 +334,14 @@ func (c *Controller) createComponentVMs(appName string, comp *v1.Component, comp
 }
 
 // recreateComponentVMs recreates unhealthy VMs in a component
-func (c *Controller) recreateComponentVMs(comp *v1.Component) error {
+func (c *Controller) recreateComponentVMs(appName string, comp *v1.Component) error {
 	// For now, simple recreation: delegate to createComponentVMs using the component spec
 	compRef := v1.ComponentRef{
 		Name:               comp.Metadata.Name,
 		VirtualMachineSpec: comp.Spec.VirtualMachineSpec,
 		Replicas:           comp.Spec.Replicas,
 	}
-	return c.createComponentVMs("", comp, compRef)
+	return c.createComponentVMs(appName, comp, compRef)
 }
 
 // mergeVMSpec merges allowed overrides into a base VirtualMachineSpec
