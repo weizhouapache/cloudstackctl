@@ -99,6 +99,8 @@ type VirtualMachine struct {
 	ObservedSpec VirtualMachineSpec `json:"observedSpec,omitempty" yaml:"observedSpec,omitempty" gorm:"serializer:json"`
 	// ApplicationID links this VM to a parent Application (store application name or id)
 	ApplicationID string `json:"applicationId,omitempty" yaml:"applicationId,omitempty" gorm:"column:application_id"`
+	// ComponentID links this VM to a parent Component (store component name or id)
+	ComponentID string `json:"componentId,omitempty" yaml:"componentId,omitempty" gorm:"column:component_id"`
 	// CloudStackID is the external provider ID for this VM in CloudStack
 	CloudStackID string `json:"cloudStackId,omitempty" yaml:"cloudStackId,omitempty" gorm:"column:cloudstack_id"`
 }

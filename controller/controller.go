@@ -46,8 +46,8 @@ func (c *Controller) Start() {
 		}
 	}()
 
-	// Run reconciliation every 30 seconds
-	ticker := time.NewTicker(30 * time.Second)
+	// Run reconciliation every 10 seconds
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -544,17 +544,34 @@ func (c *Controller) handleDelete(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "application not found", http.StatusNotFound)
 			return
 		}
-		for _, cref := range app.Spec.Components {
-			db.DB.Where("name = ?", cref.Name).Delete(&v1.Component{})
+		// Mark the application as removing; actual deletion will be processed
+		// by the reconciliation loop in the order: VMs -> Components -> Applications
+		app.Status.ObservedState = "Removing"
+		app.Status.Ready = false
+		app.Status.LastChecked = time.Now()
+		if err := db.DB.Save(&app).Error; err != nil {
+			http.Error(w, "failed to mark application for removal", http.StatusInternalServerError)
+			return
 		}
-		db.DB.Delete(&app)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"deleted"}`))
+		w.Write([]byte(`{"status":"Removing"}`))
 		return
 	case "Component":
-		db.DB.Where("name = ?", name).Delete(&v1.Component{})
+		var comp v1.Component
+		if db.DB == nil || db.DB.Where("name = ?", name).First(&comp).Error != nil {
+			http.Error(w, "component not found", http.StatusNotFound)
+			return
+		}
+		// Mark component as removing; reconciler will delete when VMs are gone
+		comp.Status.ObservedState = "Removing"
+		comp.Status.Ready = false
+		comp.Status.LastChecked = time.Now()
+		if err := db.DB.Save(&comp).Error; err != nil {
+			http.Error(w, "failed to mark component for removal", http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"deleted"}`))
+		w.Write([]byte(`{"status":"Removing"}`))
 		return
 	case "VirtualMachineSpec":
 		var spec v1.VirtualMachineSpecResource
@@ -580,19 +597,23 @@ func (c *Controller) handleDelete(w http.ResponseWriter, r *http.Request) {
 				dp.SetExpunge(true)
 				c.csClient.VirtualMachine.DestroyVirtualMachine(dp)
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(`{"status":"deleted"}`))
+				w.Write([]byte(`{"status":"Deleted"}`))
 				return
 			}
 			http.Error(w, "virtualmachine not found", http.StatusNotFound)
 			return
 		}
-		if vm.CloudStackID != "" {
-			dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.CloudStackID)
-			c.csClient.VirtualMachine.DestroyVirtualMachine(dp)
+		// Instead of deleting immediately, mark VM as Removing so the reconciler
+		// will perform deletion in the proper order (VMs -> Components -> Applications).
+		vm.Status.ObservedState = "Removing"
+		vm.Status.Ready = false
+		vm.Status.LastChecked = time.Now()
+		if err := db.DB.Save(&vm).Error; err != nil {
+			http.Error(w, "failed to mark virtualmachine for removal", http.StatusInternalServerError)
+			return
 		}
-		db.DB.Delete(&vm)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"deleted"}`))
+		w.Write([]byte(`{"status":"Removing"}`))
 		return
 	case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData", "Template", "Snapshot":
 		// Delegate deletes of unmanaged CloudStack resources to handlers
@@ -672,17 +693,28 @@ func (c *Controller) Apply(resource interface{}) error {
 
 // applyApplication creates/updates an Application resource
 func (c *Controller) applyApplication(app *v1.Application) error {
-	// Save desired state to database
+	// Save desired state to database and mark as Starting.
+	if app.Status.ObservedState == "" {
+		app.Status.ObservedState = "Starting"
+		app.Status.Ready = false
+		app.Status.LastChecked = time.Now()
+	}
 	if err := db.DB.Save(app).Error; err != nil {
 		return err
 	}
 
-	// Resolve component dependencies and create resources
-	return c.ResolveComponentDependencies(app)
+	// Actual creation of component VMs is handled by the reconciler.
+	return nil
 }
 
 // applyComponent creates/updates a Component resource
 func (c *Controller) applyComponent(comp *v1.Component) error {
+	if comp.Status.ObservedState == "" {
+		comp.Status.ObservedState = "Created"
+		comp.Status.Ready = false
+		comp.Status.LastChecked = time.Now()
+	}
+	// Persist desired component with effective spec (if present)
 	return db.DB.Save(comp).Error
 }
 
@@ -696,6 +728,11 @@ func (c *Controller) applyVMSpec(vs *v1.VirtualMachineSpecResource) error {
 			return nil
 		}
 		return fmt.Errorf("VirtualMachineSpec %s already exists and cannot be updated", vs.Metadata.Name)
+	}
+	if vs.Status.ObservedState == "" {
+		vs.Status.ObservedState = "Created"
+		vs.Status.Ready = false
+		vs.Status.LastChecked = time.Now()
 	}
 	return db.DB.Create(vs).Error
 }

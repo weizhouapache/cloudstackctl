@@ -32,7 +32,7 @@ func (c *Controller) ResolveComponentDependencies(app *v1.Application) error {
 
 		// Create component VMs
 		log.Printf("Creating component %s (replicas: %d)", compRef.Name, compRef.Replicas)
-		if err := c.createComponentVMs(&component, compRef); err != nil {
+		if err := c.createComponentVMs(app.Metadata.Name, &component, compRef); err != nil {
 			return err
 		}
 	}
