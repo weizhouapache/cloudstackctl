@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	v1 "cloudstackctl/apis/v1"
@@ -43,6 +44,19 @@ func (c *Controller) ReconcileAll() {
 			log.Printf("Failed to reconcile VM %s: %v", vm.Metadata.Name, err)
 		}
 	}
+
+	// Remove Removing components that are not part of any application.
+	var comps []v1.Component
+	if err := db.DB.Where("deleted_at IS NULL AND observed_state = ? AND (application IS NULL OR application = '')", "Removing").Find(&comps).Error; err != nil {
+		log.Printf("Failed to list components: %v", err)
+		return
+	}
+	for _, comp := range comps {
+		log.Printf("Deleting component %s marked as Removing and not linked to any application", comp.Metadata.Name)
+		if err := db.DB.Delete(&comp).Error; err != nil {
+			log.Printf("Failed to delete component %s: %v", comp.Metadata.Name, err)
+		}
+	}
 }
 
 // ReconcileApplication ensures application state matches desired state
@@ -52,7 +66,115 @@ func (c *Controller) ReconcileApplication(app *v1.Application) error {
 		return nil
 	}
 
-	return c.ResolveComponentDependencies(app)
+	// Normal reconciliation for this application: VMs -> Components -> Application
+	// Reconcile VMs belonging to this application
+	var vms []v1.VirtualMachine
+	if err := db.DB.Where("application = ? AND (observed_state IS NULL OR observed_state <> ?)", app.Metadata.Name, "Removing").Find(&vms).Error; err == nil {
+		for _, vm := range vms {
+			if err := c.ReconcileVM(&vm); err != nil {
+				log.Printf("app worker: failed to reconcile VM %s: %v", vm.Metadata.Name, err)
+			}
+		}
+	}
+
+	// Reconcile components belonging to this application
+	var comps []v1.Component
+	if err := db.DB.Where("application = ? AND (observed_state IS NULL OR observed_state <> ?)", app.Metadata.Name, "Removing").Find(&comps).Error; err == nil {
+		for _, comp := range comps {
+			if err := c.ReconcileComponent(&comp); err != nil {
+				log.Printf("app worker: failed to reconcile component %s: %v", comp.Metadata.Name, err)
+			}
+		}
+	}
+
+	// If all components are Healthy, mark application as Ready=true and ObservedState=Healthy. Otherwise, mark as Unhealthy.
+	components := []v1.Component{}
+	if err := db.DB.Where("application = ?", app.Metadata.Name).Find(&components).Error; err != nil {
+		return err
+	}
+
+	ready := true
+	for _, c := range components {
+		if c.Status.ObservedState != "Healthy" {
+			ready = false
+			break
+		}
+	}
+
+	app.Status.Ready = ready
+	if ready {
+		app.Status.ObservedState = "Healthy"
+	} else {
+		app.Status.ObservedState = "Unhealthy"
+	}
+	app.Status.LastChecked = time.Now()
+	db.DB.Save(app)
+
+	return nil
+}
+
+func (c *Controller) ReconcileRemovingApplication(app *v1.Application) error {
+	name := app.Metadata.Name
+
+	// 1) Destroy VMs belonging to this application that are marked Removing
+	var removingVMs []v1.VirtualMachine
+	if err := db.DB.Where("application = ? AND observed_state = ?", name, "Removing").Find(&removingVMs).Error; err == nil {
+		for _, vm := range removingVMs {
+			log.Printf("app worker: destroying VM %s", vm.Metadata.Name)
+			if vm.CloudStackID != "" {
+				dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.CloudStackID)
+				dp.SetExpunge(true)
+				if _, err := c.csClient.VirtualMachine.DestroyVirtualMachine(dp); err != nil {
+					log.Printf("app worker: failed to destroy VM %s (id=%s): %v", vm.Metadata.Name, vm.CloudStackID, err)
+					return fmt.Errorf("failed to destroy VM %s: %w", vm.Metadata.Name, err)
+				}
+			}
+			if err := db.DB.Delete(&vm).Error; err != nil {
+				log.Printf("app worker: failed to delete VM record %s: %v", vm.Metadata.Name, err)
+				return fmt.Errorf("failed to delete VM record %s: %w", vm.Metadata.Name, err)
+			}
+		}
+	}
+
+	// 2) Delete components belonging to this application that are marked Removing (only if no VMs reference them)
+	var removingComps []v1.Component
+	if err := db.DB.Where("application = ? AND observed_state = ?", name, "Removing").Find(&removingComps).Error; err == nil {
+		for _, comp := range removingComps {
+			var vmCount int64
+			if err := db.DB.Model(&v1.VirtualMachine{}).Where("component = ?", comp.Metadata.Name).Count(&vmCount).Error; err != nil {
+				log.Printf("app worker: failed to count VMs for component %s: %v", comp.Metadata.Name, err)
+				return fmt.Errorf("failed to count VMs for component %s: %w", comp.Metadata.Name, err)
+			}
+			if vmCount > 0 {
+				log.Printf("app worker: skipping deletion of component %s: %d VMs still exist", comp.Metadata.Name, vmCount)
+				continue
+			}
+			log.Printf("app worker: removing component %s", comp.Metadata.Name)
+			if err := db.DB.Delete(&comp).Error; err != nil {
+				log.Printf("app worker: failed to delete component %s: %v", comp.Metadata.Name, err)
+				return fmt.Errorf("failed to delete component %s: %w", comp.Metadata.Name, err)
+			}
+		}
+	}
+
+	// 3) If no components remain for the application, delete the application record and stop worker
+	var remaining int64
+	if err := db.DB.Model(&v1.Component{}).Where("application = ?", name).Count(&remaining).Error; err != nil {
+		return fmt.Errorf("failed to count remaining components for application %s: %w", name, err)
+	}
+	if remaining == 0 {
+		if err := db.DB.Delete(&app).Error; err != nil {
+			log.Printf("app worker: failed to delete application %s: %v", name, err)
+			return fmt.Errorf("failed to delete application %s: %w", name, err)
+		} else {
+			log.Printf("app worker: application %s removed", name)
+		}
+		// stop the worker after cleanup
+		c.stopAppWorker(name)
+		return nil
+	}
+	// If we reach here, it means there are still components or VMs that need to be cleaned up. The worker will continue running and pick them up in the next reconciliation loop.
+	return fmt.Errorf("cleanup in progress, waiting for next reconciliation loop")
 }
 
 // ReconcileComponent ensures component state matches desired state
@@ -276,48 +398,84 @@ func (c *Controller) createComponentVMs(appName string, comp *v1.Component, comp
 		effective = mergeVMSpec(base, overrides)
 	}
 
+	// First, create DB placeholders for any VMs that don't exist to avoid races.
+	vmNames := make([]string, 0, compRef.Replicas)
 	for i := 0; i < compRef.Replicas; i++ {
-		vmName := fmt.Sprintf("%s-%d", comp.Metadata.Name, i+1)
+		vmNames = append(vmNames, fmt.Sprintf("%s-%d", comp.Metadata.Name, i+1))
+	}
 
-		// Skip if VM already exists
+	vms := make([]*v1.VirtualMachine, 0, len(vmNames))
+	for _, vmName := range vmNames {
 		var existing v1.VirtualMachine
 		if err := db.DB.Where("name = ?", vmName).First(&existing).Error; err == nil {
-			// VM already present, skip creation
+			// already exists, add pointer to slice
+			e := existing
+			vms = append(vms, &e)
 			continue
 		}
-
-		// persist effective spec into the component for visibility
+		// create placeholder record
 		comp.EffectiveSpec = effective
-
 		vm := &v1.VirtualMachine{
 			APIVersion: v1.APIVersion,
 			Kind:       "VirtualMachine",
 			Metadata:   v1.Metadata{Name: vmName},
 			Spec:       effective,
+			Component:  comp.Metadata.Name,
 		}
-
-		// Link VM to owning application if provided
 		if appName != "" {
 			vm.Application = appName
 		}
-
-		// Link VM to owning component
-		vm.Component = comp.Metadata.Name
-
-		// Persist desired VM record and create in CloudStack
-		if err := db.DB.Save(vm).Error; err != nil {
+		if err := db.DB.Create(vm).Error; err != nil {
 			return err
 		}
+		vms = append(vms, vm)
+	}
 
-		if id, err := handlers.ApplyVirtualMachineManaged(vm, true); err != nil {
-			// Remove VM if creation failed to avoid repeated creation attempts; user can recreate after fixing the issue.
-			db.DB.Delete(vm)
-			return err
-		} else {
-			if id != "" {
-				vm.CloudStackID = id
-				db.DB.Save(vm)
+	// Create VMs in parallel (limit concurrency with a semaphore)
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(vms))
+	sem := make(chan struct{}, 5) // max 5 concurrent creations
+
+	for _, vm := range vms {
+		// if VM already has CloudStackID, skip
+		if vm.CloudStackID != "" {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(vmName string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			// reload the VM record to get any external updates
+			var cur v1.VirtualMachine
+			if err := db.DB.Where("name = ?", vmName).First(&cur).Error; err != nil {
+				errCh <- err
+				return
 			}
+
+			id, err := handlers.ApplyVirtualMachineManaged(&cur, true)
+			if err != nil {
+				// cleanup placeholder to avoid repeated attempts
+				_ = db.DB.Where("name = ?", vmName).Delete(&v1.VirtualMachine{}).Error
+				errCh <- err
+				return
+			}
+			if id != "" {
+				if err := db.DB.Model(&v1.VirtualMachine{}).Where("name = ?", vmName).Update("cloudstack_id", id).Error; err != nil {
+					errCh <- err
+					return
+				}
+			}
+		}(vm.Metadata.Name)
+	}
+	wg.Wait()
+	close(errCh)
+
+	// If any creation failed, return first error
+	for e := range errCh {
+		if e != nil {
+			return e
 		}
 	}
 
@@ -325,6 +483,13 @@ func (c *Controller) createComponentVMs(appName string, comp *v1.Component, comp
 	var count int64
 	if err := db.DB.Model(&v1.VirtualMachine{}).Where("name LIKE ?", comp.Metadata.Name+"-%").Count(&count).Error; err == nil {
 		comp.ObservedReplicas = int(count)
+	}
+	// If the component is not being removed, mark it Started/Ready now that
+	// its VMs have been created/ensured. This mirrors Application state.
+	if comp.Status.ObservedState != "Removing" {
+		comp.Status.Ready = false // not healthy yet, just started
+		comp.Status.ObservedState = "Started"
+		comp.Status.LastChecked = time.Now()
 	}
 	if err := db.DB.Save(comp).Error; err != nil {
 		return err

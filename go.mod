@@ -13,6 +13,8 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
+require gopkg.in/yaml.v3 v3.0.1
+
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect

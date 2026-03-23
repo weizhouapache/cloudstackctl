@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/apache/cloudstack-go/v2/cloudstack"
 )
 
@@ -47,119 +49,33 @@ func (c *Controller) startAppWorker(appName string) {
 					log.Printf("app worker: application %s not found: %v", name, err)
 					continue
 				}
-				// If application is marked Removing, perform scoped removal in order: VMs -> Components -> Application
-				if app.Status.ObservedState == "Removing" {
+				switch app.Status.ObservedState {
+				case "Removing":
+					// If application is marked Removing, perform scoped removal in order: VMs -> Components -> Application
 					log.Printf("app worker: processing removal for application %s", name)
 
-					// 1) Destroy VMs belonging to this application that are marked Removing
-					var removingVMs []v1.VirtualMachine
-					if err := db.DB.Where("application = ? AND observed_state = ?", name, "Removing").Find(&removingVMs).Error; err == nil {
-						for _, vm := range removingVMs {
-							log.Printf("app worker: destroying VM %s", vm.Metadata.Name)
-							if vm.CloudStackID != "" {
-								dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.CloudStackID)
-								dp.SetExpunge(true)
-								if _, err := c.csClient.VirtualMachine.DestroyVirtualMachine(dp); err != nil {
-									log.Printf("app worker: failed to destroy VM %s (id=%s): %v", vm.Metadata.Name, vm.CloudStackID, err)
-								}
-							}
-							if err := db.DB.Delete(&vm).Error; err != nil {
-								log.Printf("app worker: failed to delete VM record %s: %v", vm.Metadata.Name, err)
-							}
-						}
+					if err := c.ReconcileRemovingApplication(&app); err != nil {
+						log.Printf("app worker: removing application %s failed: %v", name, err)
+						continue
 					}
+					return
 
-					// 2) Delete components belonging to this application that are marked Removing (only if no VMs reference them)
-					var removingComps []v1.Component
-					if err := db.DB.Where("application = ? AND observed_state = ?", name, "Removing").Find(&removingComps).Error; err == nil {
-						for _, comp := range removingComps {
-							var vmCount int64
-							if err := db.DB.Model(&v1.VirtualMachine{}).Where("component = ?", comp.Metadata.Name).Count(&vmCount).Error; err != nil {
-								log.Printf("app worker: failed to count VMs for component %s: %v", comp.Metadata.Name, err)
-								continue
-							}
-							if vmCount > 0 {
-								log.Printf("app worker: skipping deletion of component %s: %d VMs still exist", comp.Metadata.Name, vmCount)
-								continue
-							}
-							log.Printf("app worker: removing component %s", comp.Metadata.Name)
-							if err := db.DB.Delete(&comp).Error; err != nil {
-								log.Printf("app worker: failed to delete component %s: %v", comp.Metadata.Name, err)
-							}
-						}
+				case "Starting":
+					// Start the application
+					log.Printf("app worker: starting application %s", name)
+					if err := c.ResolveComponentDependencies(&app); err != nil {
+						log.Printf("app worker: start application %s failed: %v", name, err)
 					}
-
-					// 3) If no components remain for the application, delete the application record and stop worker
-					var remaining int64
-					if err := db.DB.Model(&v1.Component{}).Where("application = ?", name).Count(&remaining).Error; err == nil {
-						if remaining == 0 {
-							if err := db.DB.Delete(&app).Error; err != nil {
-								log.Printf("app worker: failed to delete application %s: %v", name, err)
-							} else {
-								log.Printf("app worker: application %s removed", name)
-							}
-							// stop the worker after cleanup
-							c.stopAppWorker(name)
-							return
-						}
-					}
-
-					// If components still remain, we'll wait for next tick
 					continue
-				}
 
-				if app.Status.ObservedState == "Starting" {
-					// Reconcile the application itself
+				default:
+					// Reconcile the application
+					log.Printf("app worker: reconciling application %s", name)
 					if err := c.ReconcileApplication(&app); err != nil {
 						log.Printf("app worker: reconcile application %s failed: %v", name, err)
 					}
-					return
+					continue
 				}
-
-				// Normal reconciliation for this application: VMs -> Components -> Application
-				// Reconcile VMs belonging to this application
-				var vms []v1.VirtualMachine
-				if err := db.DB.Where("application = ? AND (observed_state IS NULL OR observed_state <> ?)", name, "Removing").Find(&vms).Error; err == nil {
-					for _, vm := range vms {
-						if err := c.ReconcileVM(&vm); err != nil {
-							log.Printf("app worker: failed to reconcile VM %s: %v", vm.Metadata.Name, err)
-						}
-					}
-				}
-
-				// Reconcile components belonging to this application
-				var comps []v1.Component
-				if err := db.DB.Where("application = ? AND (observed_state IS NULL OR observed_state <> ?)", name, "Removing").Find(&comps).Error; err == nil {
-					for _, comp := range comps {
-						if err := c.ReconcileComponent(&comp); err != nil {
-							log.Printf("app worker: failed to reconcile component %s: %v", comp.Metadata.Name, err)
-						}
-					}
-				}
-
-				// If all components are Healthy, mark application as Ready=true and ObservedState=Healthy. Otherwise, mark as Unhealthy.
-				components := []v1.Component{}
-				if err := db.DB.Where("application = ?", app.Metadata.Name).Find(&components).Error; err != nil {
-					return
-				}
-
-				ready := true
-				for _, c := range components {
-					if c.Status.ObservedState != "Healthy" {
-						ready = false
-						break
-					}
-				}
-
-				app.Status.Ready = ready
-				if ready {
-					app.Status.ObservedState = "Healthy"
-				} else {
-					app.Status.ObservedState = "Unhealthy"
-				}
-				app.Status.LastChecked = time.Now()
-				db.DB.Save(app)
-				return
 			case <-q:
 				tk.Stop()
 				return
@@ -203,10 +119,17 @@ func (c *Controller) stopAppWorker(appName string) {
 		for _, vm := range appVMs {
 			log.Printf("stopAppWorker: removing VM %s", vm.Metadata.Name)
 			if vm.CloudStackID != "" {
-				dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.CloudStackID)
-				dp.SetExpunge(true)
-				if _, err := c.csClient.VirtualMachine.DestroyVirtualMachine(dp); err != nil {
-					log.Printf("stopAppWorker: failed to destroy CloudStack VM %s (id=%s): %v", vm.Metadata.Name, vm.CloudStackID, err)
+				// Check if VM still exists in CloudStack before attempting deletion
+				params := c.csClient.VirtualMachine.NewListVirtualMachinesParams()
+				params.SetId(vm.CloudStackID)
+				resp, _ := c.csClient.VirtualMachine.ListVirtualMachines(params)
+				if resp != nil && len(resp.VirtualMachines) > 0 {
+					dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.CloudStackID)
+					dp.SetExpunge(true)
+					if _, err := c.csClient.VirtualMachine.DestroyVirtualMachine(dp); err != nil {
+						log.Printf("stopAppWorker: failed to destroy CloudStack VM %s (id=%s): %v", vm.Metadata.Name, vm.CloudStackID, err)
+						return
+					}
 				}
 			}
 			if err := db.DB.Delete(&vm).Error; err != nil {
@@ -300,150 +223,110 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var meta map[string]interface{}
-	if err := json.Unmarshal(body, &meta); err != nil {
-		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
-		return
-	}
+	dec := yaml.NewDecoder(bytes.NewReader(body))
+	var results []map[string]string
 
-	kind, _ := meta["kind"].(string)
-	var applyErr error
-	var appliedID string
-	var appliedOp string // "created" | "updated" | "accepted"
-
-	switch kind {
-	case "VirtualMachineSpec":
-		var vs v1.VirtualMachineSpecResource
-		if err := json.Unmarshal(body, &vs); err != nil {
-			http.Error(w, "failed to parse VirtualMachineSpec", http.StatusBadRequest)
-			return
-		}
-		// detect create vs update
-		if db.DB == nil {
-			appliedOp = "accepted"
-		} else {
-			var existing v1.VirtualMachineSpecResource
-			if db.DB.Where("name = ?", vs.Metadata.Name).First(&existing).Error != nil {
-				appliedOp = "created"
-			} else {
-				appliedOp = "updated"
+	for {
+		var doc interface{}
+		if err := dec.Decode(&doc); err != nil {
+			if err == io.EOF {
+				break
 			}
-		}
-		applyErr = c.applyVMSpec(&vs)
-	case "Application":
-		var app v1.Application
-		if err := json.Unmarshal(body, &app); err != nil {
-			http.Error(w, "failed to parse Application", http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("failed to decode payload: %v", err), http.StatusBadRequest)
 			return
 		}
-		applyErr = c.applyApplication(&app)
-	case "Component":
-		// Accept two forms for Component.spec.virtualMachineSpec:
-		// - a string referencing a named VirtualMachineSpec
-		// - an inline object describing a VirtualMachineSpec
-		type compSpecIn struct {
-			VirtualMachineSpec json.RawMessage       `json:"virtualMachineSpec"`
-			Replicas           int                   `json:"replicas"`
-			Overrides          v1.ComponentOverrides `json:"overrides"`
-			HealthChecks       []v1.HealthCheck      `json:"healthChecks"`
-		}
-		type compIn struct {
-			APIVersion string      `json:"apiVersion"`
-			Kind       string      `json:"kind"`
-			Metadata   v1.Metadata `json:"metadata"`
-			Spec       compSpecIn  `json:"spec"`
-			Status     v1.Status   `json:"status"`
+		if doc == nil {
+			continue
 		}
 
-		var ci compIn
-		if err := json.Unmarshal(body, &ci); err != nil {
-			http.Error(w, "failed to parse Component", http.StatusBadRequest)
+		raw, _ := json.Marshal(doc)
+		var meta map[string]interface{}
+		if err := json.Unmarshal(raw, &meta); err != nil {
+			http.Error(w, "invalid resource document", http.StatusBadRequest)
 			return
 		}
+		kind, _ := meta["kind"].(string)
 
-		comp := v1.Component{
-			APIVersion: ci.APIVersion,
-			Kind:       ci.Kind,
-			Metadata:   ci.Metadata,
-			Spec: v1.ComponentSpec{
-				Replicas:     ci.Spec.Replicas,
-				Overrides:    ci.Spec.Overrides,
-				HealthChecks: ci.Spec.HealthChecks,
-			},
-		}
-
-		// Interpret VirtualMachineSpec field which may be a string or object
-		if len(ci.Spec.VirtualMachineSpec) > 0 {
-			// If it starts with a quote it's a JSON string
-			b := ci.Spec.VirtualMachineSpec
-			// trim whitespace
-			trimmed := bytes.TrimSpace(b)
-			if len(trimmed) > 0 && trimmed[0] == '"' {
-				var ref string
-				if err := json.Unmarshal(b, &ref); err == nil {
-					comp.Spec.VirtualMachineSpec = ref
-				}
-			} else {
-				// Attempt to decode inline VirtualMachineSpec
-				var vms v1.VirtualMachineSpec
-				if err := json.Unmarshal(b, &vms); err == nil {
-					comp.EffectiveSpec = vms
+		switch kind {
+		case "VirtualMachineSpec":
+			var vs v1.VirtualMachineSpecResource
+			if err := json.Unmarshal(raw, &vs); err != nil {
+				http.Error(w, "failed to parse VirtualMachineSpec", http.StatusBadRequest)
+				return
+			}
+			appliedOp := "accepted"
+			if db.DB != nil {
+				var existing v1.VirtualMachineSpecResource
+				if db.DB.Where("name = ?", vs.Metadata.Name).First(&existing).Error != nil {
+					appliedOp = "created"
+				} else {
+					appliedOp = "updated"
 				}
 			}
-		}
-
-		// detect create vs update
-		if db.DB == nil {
-			appliedOp = "accepted"
-		} else {
-			var existing v1.Component
-			if db.DB.Where("name = ?", comp.Metadata.Name).First(&existing).Error != nil {
-				appliedOp = "created"
-			} else {
-				appliedOp = "updated"
+			if err := c.applyVMSpec(&vs); err != nil {
+				results = append(results, map[string]string{"kind": kind, "name": vs.Metadata.Name, "status": "error", "message": err.Error()})
+				continue
 			}
-		}
-		applyErr = c.applyComponent(&comp)
-	case "VirtualMachine":
-		var vm v1.VirtualMachine
-		if err := json.Unmarshal(body, &vm); err != nil {
-			http.Error(w, "failed to parse VirtualMachine", http.StatusBadRequest)
+			results = append(results, map[string]string{"kind": kind, "name": vs.Metadata.Name, "status": "success", "action": appliedOp})
+
+		case "Application":
+			var app v1.Application
+			if err := json.Unmarshal(raw, &app); err != nil {
+				http.Error(w, "failed to parse Application", http.StatusBadRequest)
+				return
+			}
+			if err := c.applyApplication(&app); err != nil {
+				results = append(results, map[string]string{"kind": kind, "name": app.Metadata.Name, "status": "error", "message": err.Error()})
+				continue
+			}
+			results = append(results, map[string]string{"kind": kind, "name": app.Metadata.Name, "status": "success", "action": "accepted"})
+
+		case "Component":
+			// Best-effort: unmarshal directly into Component. Inline VM spec support
+			// is preserved via `Component.EffectiveSpec` elsewhere; reject malformed input here.
+			var comp v1.Component
+			if err := json.Unmarshal(raw, &comp); err != nil {
+				http.Error(w, "failed to parse Component", http.StatusBadRequest)
+				return
+			}
+			if err := c.applyComponent(&comp); err != nil {
+				results = append(results, map[string]string{"kind": kind, "name": comp.Metadata.Name, "status": "error", "message": err.Error()})
+				continue
+			}
+			results = append(results, map[string]string{"kind": kind, "name": comp.Metadata.Name, "status": "success", "action": "accepted"})
+
+		case "VirtualMachine":
+			var vm v1.VirtualMachine
+			if err := json.Unmarshal(raw, &vm); err != nil {
+				http.Error(w, "failed to parse VirtualMachine", http.StatusBadRequest)
+				return
+			}
+			if err := c.applyVM(&vm); err != nil {
+				results = append(results, map[string]string{"kind": kind, "name": vm.Metadata.Name, "status": "error", "message": err.Error()})
+				continue
+			}
+			results = append(results, map[string]string{"kind": kind, "name": vm.Metadata.Name, "status": "success", "action": "applied"})
+
+		case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData":
+			id, err := handlers.ApplyCloudStackResource(raw)
+			if err != nil {
+				results = append(results, map[string]string{"kind": kind, "status": "error", "message": err.Error()})
+				continue
+			}
+			if id != "" {
+				log.Printf("Applied %s id=%s", kind, id)
+				results = append(results, map[string]string{"kind": kind, "status": "success", "id": id})
+			} else {
+				results = append(results, map[string]string{"kind": kind, "status": "success"})
+			}
+
+		default:
+			http.Error(w, "unsupported kind", http.StatusBadRequest)
 			return
 		}
-		applyErr = c.applyVM(&vm)
-	case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData":
-		appliedID, applyErr = handlers.ApplyCloudStackResource(body)
-		if applyErr == nil && appliedID != "" {
-			log.Printf("Applied %s id=%s", kind, appliedID)
-		}
-	default:
-		http.Error(w, "unsupported kind", http.StatusBadRequest)
-		return
 	}
 
-	if applyErr != nil {
-		log.Printf("apply error for kind=%s: %v", kind, applyErr)
-		http.Error(w, fmt.Sprintf("failed to apply resource: %v", applyErr), http.StatusInternalServerError)
-		return
-	}
-
-	// Build response including created/applied resource id when available
-	respMap := map[string]string{"status": "success", "message": "resource accepted for reconciliation"}
-	if appliedOp != "" {
-		respMap["action"] = appliedOp
-		switch appliedOp {
-		case "created":
-			respMap["message"] = "resource created"
-		case "updated":
-			respMap["message"] = "resource updated"
-		}
-	}
-	if appliedID != "" {
-		respMap["id"] = appliedID
-		respMap["kind"] = kind
-		respMap["message"] = "resource applied"
-	}
-	b, _ := json.Marshal(respMap)
+	b, _ := json.Marshal(results)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(b)
@@ -985,7 +868,7 @@ func ensureComponentsForApplication(app *v1.Application) error {
 					Replicas:           cref.Replicas,
 					HealthChecks:       cref.HealthChecks,
 				},
-				Status:      v1.Status{ObservedState: "Created", Ready: false, LastChecked: time.Now()},
+				Status:      v1.Status{ObservedState: "Starting", Ready: false, LastChecked: time.Now()},
 				Application: app.Metadata.Name,
 			}
 			if err := db.DB.Create(&comp).Error; err != nil {
@@ -1000,8 +883,20 @@ func ensureComponentsForApplication(app *v1.Application) error {
 			}
 			// If no owner recorded, set the application owner.
 			if comp.Application == "" {
+				log.Printf("Linking existing component %s to application %s", comp.Metadata.Name, app.Metadata.Name)
+				// Perform a targeted update to avoid overwriting other fields on the existing record.
+				if err := db.DB.Model(&v1.Component{}).Where("name = ?", comp.Metadata.Name).Update("application", app.Metadata.Name).Error; err != nil {
+					log.Printf("failed to link component %s to application %s: %v", comp.Metadata.Name, app.Metadata.Name, err)
+					return err
+				}
+				log.Printf("linked component %s -> application %s", comp.Metadata.Name, app.Metadata.Name)
+				// refresh local copy and mark Starting so reconciler will create VMs
 				comp.Application = app.Metadata.Name
+				comp.Status.ObservedState = "Starting"
+				comp.Status.Ready = false
+				comp.Status.LastChecked = time.Now()
 				if err := db.DB.Save(&comp).Error; err != nil {
+					log.Printf("failed to persist updated status for component %s: %v", comp.Metadata.Name, err)
 					return err
 				}
 			}
@@ -1012,8 +907,8 @@ func ensureComponentsForApplication(app *v1.Application) error {
 			if err := db.DB.Where("component = ?", comp.Metadata.Name).Find(&vms).Error; err == nil {
 				for _, vm := range vms {
 					if vm.Application == "" {
-						vm.Application = app.Metadata.Name
-						if err := db.DB.Save(&vm).Error; err != nil {
+						log.Printf("Linking VM %s to application %s", vm.Metadata.Name, app.Metadata.Name)
+						if err := db.DB.Model(&v1.VirtualMachine{}).Where("name = ?", vm.Metadata.Name).Update("application", app.Metadata.Name).Error; err != nil {
 							return err
 						}
 					}

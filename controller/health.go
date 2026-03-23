@@ -176,6 +176,19 @@ func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
 			} else {
 				conn.Close()
 			}
+		case "tcp":
+			// Generic TCP connect check; default port 80 when not specified.
+			port := "80"
+			if hc.Port != 0 {
+				port = fmt.Sprintf("%d", hc.Port)
+			}
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort(vmIP, port), timeout)
+			if err != nil {
+				log.Printf("VM %s TCP check to %s:%s failed: %v", vm.Metadata.Name, vmIP, port, err)
+				overallHealthy = false
+			} else {
+				conn.Close()
+			}
 		default:
 			// Unknown check type: mark as not healthy and log
 			log.Printf("Unknown health check type %s for VM %s", hc.Type, vm.Metadata.Name)

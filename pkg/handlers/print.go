@@ -8,7 +8,6 @@ import (
 	"text/tabwriter"
 
 	v1 "cloudstackctl/apis/v1"
-	"cloudstackctl/db"
 
 	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 )
@@ -146,8 +145,8 @@ func PrintNetworks(nets []*cs.Network) {
 	w.Flush()
 }
 
-// PrintVMsFromDB prints VMs returned by the controller DB query.
-func PrintVMsFromDB(vms []v1.VirtualMachine) {
+// PrintVMsFromController prints VMs returned by the controller query.
+func PrintVMsFromController(vms []v1.VirtualMachine) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tAPPLICATION\tCOMPONENT\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS\tREADY\tDRIFT")
 	for _, vm := range vms {
@@ -180,28 +179,12 @@ func PrintComponents(comps []v1.Component) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tAPPLICATION\tREPLICAS\tVM SPEC\tSTATE\tOBSERVED REPLICAS")
 
-	// Build component -> applications map for display
-	var apps []v1.Application
-	appMap := map[string]string{}
-	if db.DB != nil {
-		if err := db.DB.Find(&apps).Error; err == nil {
-			for _, a := range apps {
-				for _, cref := range a.Spec.Components {
-					if appMap[cref.Name] == "" {
-						appMap[cref.Name] = a.Metadata.Name
-					} else {
-						appMap[cref.Name] = appMap[cref.Name] + "," + a.Metadata.Name
-					}
-				}
-			}
-		}
-	}
 	for _, c := range comps {
 		replicas := c.Spec.Replicas
 		vmSpec := c.Spec.VirtualMachineSpec
 		observed := c.ObservedReplicas
 		state := c.Status.ObservedState
-		appNames := appMap[c.Metadata.Name]
+		appNames := c.Application
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%d\n", c.Metadata.Name, appNames, replicas, vmSpec, state, observed)
 	}
 	w.Flush()

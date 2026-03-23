@@ -96,12 +96,12 @@ func (c *Controller) ResolveComponentDependencies(app *v1.Application) error {
 			}
 		}
 
-		log.Printf("Creating component %s (replicas: %d)", compRef.Name, compRef.Replicas)
 		// If the Application's ComponentRef did not specify replicas, fall back
 		// to the persisted Component.Spec.Replicas value.
 		if compRef.Replicas == 0 {
 			compRef.Replicas = component.Spec.Replicas
 		}
+		log.Printf("Creating component %s (replicas: %d)", compRef.Name, compRef.Replicas)
 		if compRef.Replicas == 0 {
 			log.Printf("Warning: component %s has replicas=0; skipping creation", compRef.Name)
 			continue
@@ -113,8 +113,8 @@ func (c *Controller) ResolveComponentDependencies(app *v1.Application) error {
 
 	// Mark application as ready if it's not in Removing state
 	if app.Status.ObservedState != "Removing" {
-		app.Status.Ready = true
-		app.Status.ObservedState = "Running"
+		app.Status.Ready = false // not healthy yet, just started
+		app.Status.ObservedState = "Started"
 		app.Status.LastChecked = time.Now()
 		return db.DB.Save(app).Error
 	}
@@ -127,7 +127,7 @@ func (c *Controller) ResolveComponentDependencies(app *v1.Application) error {
 func (c *Controller) waitForComponentHealth(componentName string) error {
 	log.Printf("Waiting for component %s to become healthy", componentName)
 
-	timeout := time.After(5 * time.Minute)
+	timeout := time.After(15 * time.Minute)
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -146,16 +146,21 @@ func (c *Controller) waitForComponentHealth(componentName string) error {
 				continue
 			}
 
+			// If not ready, attempt to actively reconcile the component so that
+			// VMs are created and health checks can progress. This avoids a
+			// deadlock where the caller is waiting but no reconciler runs.
 			if component.Status.Ready {
 				log.Printf("Component %s is healthy", componentName)
 				return nil
 			}
+			// Trigger an immediate reconcile to drive the component towards readiness.
+			if err := c.ReconcileComponent(&component); err != nil {
+				log.Printf("waitForComponentHealth: reconcile attempt for %s returned error: %v", componentName, err)
+				// don't return here; keep waiting until timeout to allow retries
+			}
 			log.Printf("Component %s not healthy yet (state: %s)", componentName, component.Status.ObservedState)
 		}
 	}
-
-	log.Printf("Component %s is healthy", componentName)
-	return nil
 }
 
 // logError creates a formatted error with log message

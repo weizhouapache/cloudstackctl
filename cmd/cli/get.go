@@ -68,7 +68,7 @@ var getCmd = &cobra.Command{
 		if resourceType == "VirtualMachine" && !getAll {
 			var vms []v1.VirtualMachine
 			if err := json.Unmarshal(body, &vms); err == nil {
-				handlers.PrintVMsFromDB(vms)
+				handlers.PrintVMsFromController(vms)
 				return
 			}
 		}

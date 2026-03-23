@@ -15,24 +15,24 @@ For local development configuration see [Development.md](Development.md).
 
 There are two supported mode:
 
-- **Standalone mode (`-s` / `--standalone`):** CLI-only mode that talks directly to CloudStack APIs and does not read or write the database. Use this for quick ad-hoc operations without running the controller. Cluster mode requires running the controller and Postgres (see Development.md).
+- **Standalone mode (`-s` / `--standalone`):** CLI-only mode that talks directly to CloudStack APIs and does not read or write the database. Use this for quick ad-hoc operations without running the controller. Controller mode requires running the controller and Postgres (see Development.md).
 
-- **Cluster mode (default):** `cloudstackctl` operates with a PostgreSQL backing store and a controller process that reconciles desired state with CloudStack. Resources are managed via the database/controller.
+- **Controller mode (default):** `cloudstackctl` operates with a PostgreSQL backing store and a controller process that reconciles desired state with CloudStack. Resources are managed via the database/controller.
 
 ## Standalone mode
 
 <img src="Architecture-standalone.png" width="50%" alt="Architecture of Standalone mode" />
 
-## Cluster mode
+## Controller mode
 
-<img src="Architecture.png" width="50%" alt="Architecture of Cluster mode" />
+<img src="Architecture.png" width="50%" alt="Architecture of Controller mode" />
 
 
 ---
 
 ## Two Modes With YAML Support
 
-| Feature | Standalone Mode | Cluster Mode |
+| Feature | Standalone Mode | Controller mode |
 |---|---|---|
 | Purpose | Direct CloudStack resource management using YAML | Declarative orchestration with controller and DB |
 | Architecture | CLI → CloudStack API | CLI → API Server → PostgreSQL → Controller → CloudStack API |
@@ -43,7 +43,7 @@ There are two supported mode:
 
 ### Resource Support Matrix
 
-| Resource | Standalone Mode | Cluster Mode |
+| Resource | Standalone Mode | Controller mode |
 |---|:---:|:---:|
 | VirtualMachine | ✅ | ✅ |
 | Network | ✅ | ✅ |
@@ -257,13 +257,17 @@ export PGSSLMODE=disable
 
 # Future Enhancements
 
-* Rolling updates
-* Automatic load balancer creation
-* Advanced health checks
-* Dependency graph visualization
-* Drift detection and auto-healing
-* Multi-zone deployments
-* Self-healing of VMs and components
+* CLI: Rolling updates
+* CLI: Support resource update via YAML file
+* CLI: Multi-zone deployments
+* CLI: Security group improvements
+* CLI/Controller: Support reconciling resources
+* Controller: Support network services of isolated network
+* Controller: Advanced health checks
+* Controller: Dependency graph visualization
+* Controller: Self-healing of VMs and components
+* Controller: Scaling of components
+* Controller: Configurable timeout settings
 
 ---
 
