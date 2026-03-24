@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"strings"
 
 	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 
@@ -20,87 +21,111 @@ var getCmd = &cobra.Command{
 	Long:  `List resources managed by cloudstackctl (Application/Component/VirtualMachine/Network/Volume/etc.)`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 1 {
-			log.Fatal("Usage: cloudstackctl get <resource-type> [name]")
+			log.Fatal("Usage: cloudstackctl get <resource-type>[,...] [name]")
 		}
 
-		resourceType := normalizeResourceType(args[0])
+		// Support comma-separated resource types: e.g. "apps,comps,vms"
+		rawKinds := strings.Split(args[0], ",")
+		kinds := make([]string, 0, len(rawKinds))
+		for _, k := range rawKinds {
+			kinds = append(kinds, normalizeResourceType(k))
+		}
+
 		name := ""
 		if len(args) > 1 {
 			name = args[1]
 		}
 
-		// Standalone: call local handler wrapper
+		// Standalone: call local handler wrapper. If any requested kind is
+		// managed by the controller, fail in standalone mode.
 		if standalone {
-			if resourceType == "Application" || resourceType == "Component" || resourceType == "VirtualMachineSpec" {
-				log.Fatalf("'%s' is not supported in standalone mode", resourceType)
+			for _, resourceType := range kinds {
+				if resourceType == "Application" || resourceType == "Component" || resourceType == "VirtualMachineSpec" {
+					log.Fatalf("'%s' is not supported in standalone mode", resourceType)
+				}
 			}
+			for i, resourceType := range kinds {
+				payload := map[string]string{"kind": resourceType}
+				if name != "" {
+					payload["name"] = name
+				}
+				raw, _ := json.Marshal(payload)
+				if resp, err := handlers.GetCloudStackResource(raw); err != nil {
+					log.Fatalf("Local get failed: %v", err)
+				} else {
+					if i > 0 {
+						fmt.Printf("\n")
+					}
+					handlers.PrintCloudStackResource(resourceType, resp)
+				}
+			}
+			return
+		}
 
-			payload := map[string]string{"kind": resourceType}
+		// Controller mode: query controller for each requested kind and print
+		// results sequentially with simple headers.
+		for i, resourceType := range kinds {
+			var endpoint = "/list"
+			q := url.Values{}
+			if getAll && resourceType == "VirtualMachine" {
+				q.Set("all", "true")
+			}
+			q.Set("kind", resourceType)
 			if name != "" {
-				payload["name"] = name
+				q.Set("name", name)
 			}
-			raw, _ := json.Marshal(payload)
-			if resp, err := handlers.GetCloudStackResource(raw); err != nil {
-				log.Fatalf("Local get failed: %v", err)
-			} else {
-				handlers.PrintCloudStackResource(resourceType, resp)
+			path := endpoint + "?" + q.Encode()
+			body, err := ControllerRequest("GET", path, nil)
+			if err != nil {
+				log.Fatalf("Failed to query controller for %s: %v", resourceType, err)
 			}
-			return
-		}
 
-		// Cluster mode: forward to controller HTTP API (/list)
-		var endpoint = "/list"
-		q := url.Values{}
-		if getAll && resourceType == "VirtualMachine" {
-			q.Set("all", "true")
-		}
-		q.Set("kind", resourceType)
-		if name != "" {
-			q.Set("name", name)
-		}
-		path := endpoint + "?" + q.Encode()
-		body, err := ControllerRequest("GET", path, nil)
-		if err != nil {
-			log.Fatalf("Failed to query controller: %v", err)
-		}
-
-		// If controller returned VM objects from DB, pretty-print them
-		if resourceType == "VirtualMachine" && !getAll {
-			var vms []v1.VirtualMachine
-			if err := json.Unmarshal(body, &vms); err == nil {
-				handlers.PrintVMsFromController(vms)
-				return
+			if i > 0 {
+				fmt.Printf("\n")
 			}
-		}
 
-		if tryDecodeAndPrint(resourceType, body) {
-			return
-		}
+			// If controller returned VM objects from DB, pretty-print them
+			if resourceType == "VirtualMachine" && !getAll {
+				var vms []v1.VirtualMachine
+				if err := json.Unmarshal(body, &vms); err == nil {
+					handlers.PrintVMsFromController(vms)
+					continue
+				}
+			}
 
-		// Controller may return DB-backed resources; print them in-table when possible
-		switch resourceType {
-		case "Component":
-			var comps []v1.Component
-			if err := json.Unmarshal(body, &comps); err == nil {
-				handlers.PrintComponents(comps)
-				return
+			if tryDecodeAndPrint(resourceType, body) {
+				continue
 			}
-		case "VirtualMachineSpec":
-			var specs []v1.VirtualMachineSpecResource
-			if err := json.Unmarshal(body, &specs); err == nil {
-				handlers.PrintVMSpecs(specs)
-				return
-			}
-		case "Application":
-			var apps []v1.Application
-			if err := json.Unmarshal(body, &apps); err == nil {
-				handlers.PrintApplications(apps)
-				return
-			}
-		}
 
-		// Fallback: print raw body
-		fmt.Println(string(body))
+			// Controller may return DB-backed resources; print them in-table when possible
+			handled := false
+			switch resourceType {
+			case "Component":
+				var comps []v1.Component
+				if err := json.Unmarshal(body, &comps); err == nil {
+					handlers.PrintComponents(comps)
+					handled = true
+				}
+			case "VirtualMachineSpec":
+				var specs []v1.VirtualMachineSpecResource
+				if err := json.Unmarshal(body, &specs); err == nil {
+					handlers.PrintVMSpecs(specs)
+					handled = true
+				}
+			case "Application":
+				var apps []v1.Application
+				if err := json.Unmarshal(body, &apps); err == nil {
+					handlers.PrintApplications(apps)
+					handled = true
+				}
+			}
+			if handled {
+				continue
+			}
+
+			// Fallback: print raw body
+			fmt.Println(string(body))
+		}
 	},
 }
 
