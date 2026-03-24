@@ -259,6 +259,7 @@ export PGSSLMODE=disable
 
 * CLI: Rolling updates
 * CLI: Support resource update via YAML file
+* CLI: Support CloudStack projects
 * CLI: Multi-zone deployments
 * CLI: Security group improvements
 * CLI/Controller: Support reconciling resources

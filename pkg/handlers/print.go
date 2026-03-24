@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
+	"time"
 
 	v1 "cloudstackctl/apis/v1"
 
@@ -31,7 +32,7 @@ func PrintCloudStackResource(kind string, obj any) error {
 	case "VirtualMachine":
 		if resp, ok := obj.(*cs.ListVirtualMachinesResponse); ok {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS")
+			fmt.Fprintln(w, "VIRTUAL MACHINE\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS")
 			for _, v := range resp.VirtualMachines {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", v.Name, v.Id, v.Templatename, v.Serviceofferingname, v.State)
 			}
@@ -41,7 +42,7 @@ func PrintCloudStackResource(kind string, obj any) error {
 	case "Template":
 		if resp, ok := obj.(*cs.ListTemplatesResponse); ok {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tID\tOS\tFEATURED")
+			fmt.Fprintln(w, "TEMPLATE\tID\tOS\tFEATURED")
 			for _, t := range resp.Templates {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%t\n", t.Name, t.Id, t.Ostypename, t.Isfeatured)
 			}
@@ -51,7 +52,7 @@ func PrintCloudStackResource(kind string, obj any) error {
 	case "SSHKey":
 		if resp, ok := obj.(*cs.ListSSHKeyPairsResponse); ok {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tFINGERPRINT")
+			fmt.Fprintln(w, "SSH KEY\tFINGERPRINT")
 			for _, k := range resp.SSHKeyPairs {
 				fmt.Fprintf(w, "%s\t%s\n", k.Name, k.Fingerprint)
 			}
@@ -61,7 +62,7 @@ func PrintCloudStackResource(kind string, obj any) error {
 	case "SecurityGroup":
 		if resp, ok := obj.(*cs.ListSecurityGroupsResponse); ok {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tID\tDESCRIPTION")
+			fmt.Fprintln(w, "SECURITY GROUP\tID\tDESCRIPTION")
 			for _, sg := range resp.SecurityGroups {
 				fmt.Fprintf(w, "%s\t%s\t%s\n", sg.Name, sg.Id, sg.Description)
 			}
@@ -71,7 +72,7 @@ func PrintCloudStackResource(kind string, obj any) error {
 	case "AffinityGroup":
 		if resp, ok := obj.(*cs.ListAffinityGroupsResponse); ok {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tID\tDESCRIPTION")
+			fmt.Fprintln(w, "AFFINITY GROUP\tID\tDESCRIPTION")
 			for _, a := range resp.AffinityGroups {
 				fmt.Fprintf(w, "%s\t%s\t%s\n", a.Name, a.Id, a.Description)
 			}
@@ -81,9 +82,9 @@ func PrintCloudStackResource(kind string, obj any) error {
 	case "UserData":
 		if resp, ok := obj.(*cs.ListUserDataResponse); ok {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tID\tPROJECT\tACCOUNT")
+			fmt.Fprintln(w, "USERDATA\tID\tACCOUNT")
 			for _, u := range resp.UserData {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", u.Name, u.Id, u.Project, u.Account)
+				fmt.Fprintf(w, "%s\t%s\t%s\n", u.Name, u.Id, u.Account)
 			}
 			w.Flush()
 			return nil
@@ -99,7 +100,7 @@ func PrintCloudStackResource(kind string, obj any) error {
 // PrintVolumes prints a table of volumes.
 func PrintVolumes(vols []*cs.Volume) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tID\tVM\tTYPE\tSTATUS")
+	fmt.Fprintln(w, "VOLUME\tID\tVIRTUAL MACHINE\tTYPE\tSTATUS")
 	for _, v := range vols {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", v.Name, v.Id, v.Vmname, v.Type, v.State)
 	}
@@ -109,7 +110,7 @@ func PrintVolumes(vols []*cs.Volume) {
 // PrintNetworks prints a table of networks.
 func PrintNetworks(nets []*cs.Network) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tID\tZONE\tVLAN\tDISPLAY TEXT\tTYPE\tSTATE")
+	fmt.Fprintln(w, "NETWORK\tID\tZONE\tVLAN\tDISPLAY TEXT\tTYPE\tSTATE")
 	client, _ := cloudstack.NewClient()
 
 	for _, n := range nets {
@@ -148,7 +149,7 @@ func PrintNetworks(nets []*cs.Network) {
 // PrintVMsFromController prints VMs returned by the controller query.
 func PrintVMsFromController(vms []v1.VirtualMachine) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tAPPLICATION\tCOMPONENT\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS\tREADY\tDRIFT")
+	fmt.Fprintln(w, "VIRTUAL MACHINE\tAPPLICATION\tCOMPONENT\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS\tREADY\tDRIFT")
 	for _, vm := range vms {
 		id := vm.CloudStackID
 		tmpl := vm.Spec.Template
@@ -177,7 +178,7 @@ func PrintVMsFromController(vms []v1.VirtualMachine) {
 // PrintComponents prints components returned by the controller DB query.
 func PrintComponents(comps []v1.Component) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tAPPLICATION\tREPLICAS\tVM SPEC\tSTATE\tOBSERVED REPLICAS")
+	fmt.Fprintln(w, "COMPONENT\tAPPLICATION\tREPLICAS\tVM SPEC\tSTATE\tOBSERVED REPLICAS\tLAST CHECKED")
 
 	for _, c := range comps {
 		replicas := c.Spec.Replicas
@@ -185,7 +186,11 @@ func PrintComponents(comps []v1.Component) {
 		observed := c.ObservedReplicas
 		state := c.Status.ObservedState
 		appNames := c.Application
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%d\n", c.Metadata.Name, appNames, replicas, vmSpec, state, observed)
+		last := ""
+		if !c.Status.LastChecked.IsZero() {
+			last = c.Status.LastChecked.Format(time.RFC3339)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%d\t%s\n", c.Metadata.Name, appNames, replicas, vmSpec, state, observed, last)
 	}
 	w.Flush()
 }
@@ -193,7 +198,7 @@ func PrintComponents(comps []v1.Component) {
 // PrintVMSpecs prints VirtualMachineSpecResource entries in a compact table.
 func PrintVMSpecs(specs []v1.VirtualMachineSpecResource) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tTEMPLATE\tSERVICE OFFERING\tNETWORKS\tVOLUMES")
+	fmt.Fprintln(w, "VM SPEC\tTEMPLATE\tSERVICE OFFERING\tNETWORKS\tVOLUMES")
 	for _, s := range specs {
 		tmpl := s.Spec.Template
 		so := s.Spec.ServiceOffering
@@ -220,7 +225,7 @@ func PrintVMSpecs(specs []v1.VirtualMachineSpecResource) {
 // PrintApplications prints applications returned by the controller DB query.
 func PrintApplications(apps []v1.Application) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tCOMPONENTS\tPROJECT\tSTATE\tREADY")
+	fmt.Fprintln(w, "APPLICATION\tCOMPONENTS\tSTATE\tREADY\tLAST CHECKED")
 	for _, a := range apps {
 		compNames := ""
 		if len(a.Spec.Components) > 0 {
@@ -229,8 +234,11 @@ func PrintApplications(apps []v1.Application) {
 				compNames += "," + a.Spec.Components[i].Name
 			}
 		}
-		project := a.Spec.Project
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%t\n", a.Metadata.Name, compNames, project, a.Status.ObservedState, a.Status.Ready)
+		last := ""
+		if !a.Status.LastChecked.IsZero() {
+			last = a.Status.LastChecked.Format(time.RFC3339)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\n", a.Metadata.Name, compNames, a.Status.ObservedState, a.Status.Ready, last)
 	}
 	w.Flush()
 }
