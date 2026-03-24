@@ -484,15 +484,18 @@ func (c *Controller) createComponentVMs(appName string, comp *v1.Component, comp
 	if err := db.DB.Model(&v1.VirtualMachine{}).Where("name LIKE ?", comp.Metadata.Name+"-%").Count(&count).Error; err == nil {
 		comp.ObservedReplicas = int(count)
 	}
-	// If the component is not being removed, mark it Started/Ready now that
-	// its VMs have been created/ensured. This mirrors Application state.
-	if comp.Status.ObservedState != "Removing" {
-		comp.Status.Ready = false // not healthy yet, just started
-		comp.Status.ObservedState = "Started"
-		comp.Status.LastChecked = time.Now()
-	}
+	// Persist observed replica count first.
 	if err := db.DB.Save(comp).Error; err != nil {
 		return err
+	}
+
+	// After creating VMs, run a health check to set the component state.
+	// This avoids overwriting a previously-detected Unhealthy state with
+	// a generic "Started" value when one or more VMs remain unhealthy.
+	if comp.Status.ObservedState != "Removing" {
+		if _, err := c.CheckComponentHealth(comp); err != nil {
+			return err
+		}
 	}
 
 	return nil
