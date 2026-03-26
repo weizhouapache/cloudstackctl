@@ -111,30 +111,53 @@ func (c *Controller) stopAppWorker(appName string) {
 		return
 	}
 
-	// 1) Delete VMs referencing this application
+	// 1) Delete VMs referencing this application, grouped by component.
 	var appVMs []v1.VirtualMachine
 	if err := db.DB.Where("application = ?", appName).Find(&appVMs).Error; err != nil {
 		log.Printf("stopAppWorker: failed to list VMs for app %s: %v", appName, err)
 	} else {
+		// Group VMs by component name (empty string for none)
+		vmsByComp := make(map[string][]v1.VirtualMachine)
+		var compOrder []string
 		for _, vm := range appVMs {
-			log.Printf("stopAppWorker: removing VM %s", vm.Metadata.Name)
-			if vm.CloudStackID != "" {
-				// Check if VM still exists in CloudStack before attempting deletion
-				params := c.csClient.VirtualMachine.NewListVirtualMachinesParams()
-				params.SetId(vm.CloudStackID)
-				resp, _ := c.csClient.VirtualMachine.ListVirtualMachines(params)
-				if resp != nil && len(resp.VirtualMachines) > 0 {
-					dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(vm.CloudStackID)
-					dp.SetExpunge(true)
-					if _, err := c.csClient.VirtualMachine.DestroyVirtualMachine(dp); err != nil {
-						log.Printf("stopAppWorker: failed to destroy CloudStack VM %s (id=%s): %v", vm.Metadata.Name, vm.CloudStackID, err)
-						return
+			comp := vm.Component
+			if _, ok := vmsByComp[comp]; !ok {
+				compOrder = append(compOrder, comp)
+			}
+			vmsByComp[comp] = append(vmsByComp[comp], vm)
+		}
+
+		// Process components in deterministic order, deleting each component's VMs in parallel
+		for _, comp := range compOrder {
+			vms := vmsByComp[comp]
+			log.Printf("stopAppWorker: removing %d VMs for component '%s'", len(vms), comp)
+			var wg sync.WaitGroup
+			for _, vm := range vms {
+				wg.Add(1)
+				vmCopy := vm
+				go func(v v1.VirtualMachine) {
+					defer wg.Done()
+					log.Printf("stopAppWorker: removing VM %s", v.Metadata.Name)
+					if v.CloudStackID != "" {
+						// Check if VM still exists in CloudStack before attempting deletion
+						params := c.csClient.VirtualMachine.NewListVirtualMachinesParams()
+						params.SetId(v.CloudStackID)
+						resp, _ := c.csClient.VirtualMachine.ListVirtualMachines(params)
+						if resp != nil && len(resp.VirtualMachines) > 0 {
+							dp := c.csClient.VirtualMachine.NewDestroyVirtualMachineParams(v.CloudStackID)
+							dp.SetExpunge(true)
+							if _, err := c.csClient.VirtualMachine.DestroyVirtualMachine(dp); err != nil {
+								log.Printf("stopAppWorker: failed to destroy CloudStack VM %s (id=%s): %v", v.Metadata.Name, v.CloudStackID, err)
+								return
+							}
+						}
 					}
-				}
+					if err := db.DB.Delete(&v).Error; err != nil {
+						log.Printf("stopAppWorker: failed to delete VM record %s: %v", v.Metadata.Name, err)
+					}
+				}(vmCopy)
 			}
-			if err := db.DB.Delete(&vm).Error; err != nil {
-				log.Printf("stopAppWorker: failed to delete VM record %s: %v", vm.Metadata.Name, err)
-			}
+			wg.Wait()
 		}
 	}
 
