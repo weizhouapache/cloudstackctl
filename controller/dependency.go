@@ -158,6 +158,10 @@ func (c *Controller) waitForComponentHealth(componentName string) error {
 				log.Printf("waitForComponentHealth: reconcile attempt for %s returned error: %v", componentName, err)
 				// don't return here; keep waiting until timeout to allow retries
 			}
+			if component.Status.Ready {
+				log.Printf("Component %s is healthy", componentName)
+				return nil
+			}
 			log.Printf("Component %s not healthy yet (state: %s)", componentName, component.Status.ObservedState)
 		}
 	}
