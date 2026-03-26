@@ -3,7 +3,9 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os/exec"
+	"strings"
 	"time"
 
 	v1 "cloudstackctl/apis/v1"
@@ -188,6 +190,52 @@ func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
 				overallHealthy = false
 			} else {
 				conn.Close()
+			}
+		case "http", "https":
+			// HTTP/HTTPS GET check. Default port 80 for http and 443 for https.
+			scheme := "http"
+			if hc.Type == "https" {
+				scheme = "https"
+			}
+			port := ""
+			if hc.Port != 0 {
+				port = fmt.Sprintf("%d", hc.Port)
+			} else {
+				if scheme == "http" {
+					port = "80"
+				} else {
+					port = "443"
+				}
+			}
+			path := "/"
+			if hc.Path != "" {
+				path = hc.Path
+				if !strings.HasPrefix(path, "/") {
+					path = "/" + path
+				}
+			}
+			// Use net.JoinHostPort to properly bracket IPv6 addresses
+			hostPort := net.JoinHostPort(vmIP, port)
+			urlStr := fmt.Sprintf("%s://%s%s", scheme, hostPort, path)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+			if err != nil {
+				log.Printf("VM %s %s check to %s failed to build request: %v", vm.Metadata.Name, hc.Type, urlStr, err)
+				overallHealthy = false
+				break
+			}
+			client := &http.Client{Timeout: timeout}
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("VM %s %s check to %s failed: %v", vm.Metadata.Name, hc.Type, urlStr, err)
+				overallHealthy = false
+			} else {
+				resp.Body.Close()
+				if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+					log.Printf("VM %s %s check to %s returned status %d", vm.Metadata.Name, hc.Type, urlStr, resp.StatusCode)
+					overallHealthy = false
+				}
 			}
 		default:
 			// Unknown check type: mark as not healthy and log
