@@ -8,7 +8,7 @@ Kubernetes-style declarative orchestration tool for Apache CloudStack
 go build -o cloudstackctl main.go
 
 # Build binary for Controller (if run locally)
-go build -o cloudstackctl-controller cmd/controller
+go build -o cloudstackctl-controller cmd/controller/main.go
 
 # Install to PATH
 sudo mv cloudstackctl /usr/local/bin/

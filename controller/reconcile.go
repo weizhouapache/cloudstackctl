@@ -431,16 +431,23 @@ func (c *Controller) createComponentVMs(appName string, comp *v1.Component, comp
 		vms = append(vms, vm)
 	}
 
-	// Create VMs in parallel (limit concurrency with a semaphore)
+	// Create VMs in parallel (limit concurrency with a semaphore).
+	// Launches are staggered 2 seconds apart to avoid concurrent CloudStack
+	// API contention; goroutines themselves run concurrently after their delay.
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(vms))
 	sem := make(chan struct{}, 5) // max 5 concurrent creations
 
+	launchIdx := 0
 	for _, vm := range vms {
 		// if VM already has CloudStackID, skip
 		if vm.CloudStackID != "" {
 			continue
 		}
+		if launchIdx > 0 {
+			time.Sleep(2 * time.Second)
+		}
+		launchIdx++
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(vmName string) {

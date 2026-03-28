@@ -127,12 +127,17 @@ func (c *Controller) stopAppWorker(appName string) {
 			vmsByComp[comp] = append(vmsByComp[comp], vm)
 		}
 
-		// Process components in deterministic order, deleting each component's VMs in parallel
+		// Process components in deterministic order, deleting each component's VMs in parallel.
+		// Launches are staggered 2 seconds apart to avoid concurrent CloudStack
+		// API contention; goroutines themselves run concurrently after their delay.
 		for _, comp := range compOrder {
 			vms := vmsByComp[comp]
 			log.Printf("stopAppWorker: removing %d VMs for component '%s'", len(vms), comp)
 			var wg sync.WaitGroup
-			for _, vm := range vms {
+			for i, vm := range vms {
+				if i > 0 {
+					time.Sleep(2 * time.Second)
+				}
 				wg.Add(1)
 				vmCopy := vm
 				go func(v v1.VirtualMachine) {
