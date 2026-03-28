@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
@@ -165,6 +166,30 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) (string, er
 			sgIDs = append(sgIDs, id)
 		}
 		params.SetSecuritygroupids(sgIDs)
+	}
+	// Resolve affinity group names to IDs and attach them to the deploy params.
+	if len(vm.Spec.AffinityGroups) > 0 {
+		agIDs := make([]string, 0, len(vm.Spec.AffinityGroups))
+		for _, ag := range vm.Spec.AffinityGroups {
+			id, agerr := ResolveAffinityGroup(ag)
+			if agerr != nil {
+				return "", fmt.Errorf("failed to resolve affinity group %s: %w", ag, agerr)
+			}
+			agIDs = append(agIDs, id)
+		}
+		params.SetAffinitygroupids(agIDs)
+	}
+	// Resolve userdata names to IDs; CloudStack accepts a comma-separated list.
+	if len(vm.Spec.UserDataRefs) > 0 {
+		udIDs := make([]string, 0, len(vm.Spec.UserDataRefs))
+		for _, ud := range vm.Spec.UserDataRefs {
+			id, uderr := ResolveUserData(ud)
+			if uderr != nil {
+				return "", fmt.Errorf("failed to resolve userdata %s: %w", ud, uderr)
+			}
+			udIDs = append(udIDs, id)
+		}
+		params.SetUserdataid(strings.Join(udIDs, ","))
 	}
 	// If parameters are provided, pass them as the CloudStack 'details' map
 	// first (supported by the SDK).

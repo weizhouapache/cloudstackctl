@@ -257,13 +257,14 @@ export PGSSLMODE=disable
 
 # Future Enhancements
 
-* CLI: Rolling updates
 * CLI: Support resource update via YAML file
-* CLI: Support CloudStack projects
+* CLI: Support Rolling updates
+* CLI: Support CloudStack users and projects
 * CLI: Multi-zone deployments
 * CLI: Security group improvements
+* CLI: Support UserData details
 * CLI/Controller: Support reconciling resources
-* Controller: Support network services of isolated network
+* Controller: Support network services of Isolated network
 * Controller: Advanced health checks
 * Controller: Dependency graph visualization
 * Controller: Self-healing of VMs and components
