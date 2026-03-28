@@ -1,0 +1,279 @@
+# ============================================================
+# Apache CloudStack 3-tier management cluster
+#
+# Tier 1 — MySQL database server (cs-db)
+# Tier 2 — Primary CloudStack management server (cs-mgmt-primary)
+#           Initialises the database; starts when tier 1 is healthy.
+#           Health check: HTTP GET :8080/client/
+# Tier 3 — Two additional management servers (cs-mgmt-secondary)
+#           Join the existing database; start when tier 2 is healthy.
+#           Health check: HTTP GET :8080/client/
+#
+# NOTE: DB_HOST discovery in tiers 2/3 assumes the MySQL VM hostname
+#       resolves as "cs-db-1" (set by cloud-init).  If your network
+#       does not provide DNS, update DB_HOST manually or adjust the
+#       discovery loop in the respective UserData scripts below.
+# ============================================================
+
+# ------------------------------------------------------------------
+# UserData – Tier 1: MySQL 8 setup
+# ------------------------------------------------------------------
+apiVersion: cloudstackctl/v1
+kind: UserData
+metadata:
+  name: userdata-cs-db
+spec:
+  script: |
+    #!/bin/bash
+    set -euo pipefail
+    exec > >(tee /var/log/cloudstack-db-init.log) 2>&1
+
+    ROOT_PASS="${ROOT_PASS:-root}"
+
+    echo "[tier1] Updating packages..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y
+    apt-get install -y mysql-server ncat
+
+    echo "[tier1] Configuring MySQL for remote access..."
+    # Allow connections from all interfaces
+    sed -i 's/^bind-address\s*=.*/bind-address = 0.0.0.0/' \
+        /etc/mysql/mysql.conf.d/mysqld.cnf
+
+    # Performance tuning for CloudStack
+    cat >> /etc/mysql/mysql.conf.d/mysqld.cnf <<'EOF'
+    innodb_rollback_on_timeout=1
+    innodb_lock_wait_timeout=600
+    max_connections=350
+    log_bin_trust_function_creators=1
+    EOF
+
+    systemctl restart mysql
+    systemctl enable mysql
+
+    echo "[tier1] Creating CloudStack DB user..."
+    mysql -u root <<EOSQL
+    -- enable root login with password for remote --deploy-as access
+    ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${ROOT_PASS}';
+    CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED WITH mysql_native_password BY '${ROOT_PASS}';
+    GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+    -- create the CloudStack runtime app user
+    CREATE USER IF NOT EXISTS 'cloud'@'%' IDENTIFIED BY 'cloud';
+    GRANT ALL PRIVILEGES ON *.* TO 'cloud'@'%' WITH GRANT OPTION;
+    CREATE USER IF NOT EXISTS 'cloud'@'localhost' IDENTIFIED BY 'cloud';
+    GRANT ALL PRIVILEGES ON *.* TO 'cloud'@'localhost' WITH GRANT OPTION;
+    FLUSH PRIVILEGES;
+    EOSQL
+
+    echo "[tier1] MySQL setup complete."
+
+---
+# ------------------------------------------------------------------
+# UserData – Tier 2: CloudStack primary management server
+#            Initialises the schema; starts cloudstack-management.
+# ------------------------------------------------------------------
+apiVersion: cloudstackctl/v1
+kind: UserData
+metadata:
+  name: userdata-cs-primary
+spec:
+  script: |
+    #!/bin/bash
+    set -euo pipefail
+    exec > >(tee /var/log/cloudstack-primary-init.log) 2>&1
+
+    # ------------------------------------------------------------
+    # Configuration – change DB_HOST if your DNS does not resolve
+    # the tier-1 VM hostname automatically.
+    # ------------------------------------------------------------
+    DB_HOST="${DB_HOST:-cs-db-1}"
+    DB_USER="cloud"
+    DB_PASS="cloud"
+    ROOT_PASS="${ROOT_PASS:-root}"
+
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y
+    apt-get install -y gnupg ncat curl
+
+    echo "[tier2] Adding CloudStack 4.22 repository..."
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.cloudstack.org/release.asc \
+        | gpg --dearmor -o /etc/apt/keyrings/cloudstack.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/cloudstack.gpg] \
+    https://download.cloudstack.org/ubuntu noble 4.22" \
+        > /etc/apt/sources.list.d/cloudstack.list
+
+    apt-get update -y
+    apt-get install -y cloudstack-management cloudstack-usage
+
+    echo "[tier2] Waiting for MySQL on ${DB_HOST}:3306 ..."
+    for i in $(seq 1 60); do
+        if nc -z -w 5 "${DB_HOST}" 3306 2>/dev/null; then
+            echo "[tier2] MySQL is reachable."
+            break
+        fi
+        echo "[tier2] Attempt ${i}/60 – MySQL not yet available, retrying in 10s..."
+        sleep 10
+    done
+
+    echo "[tier2] Initialising CloudStack database (primary)..."
+    cloudstack-setup-databases "${DB_USER}:${DB_PASS}@${DB_HOST}" \
+        --deploy-as=root:"${ROOT_PASS}" \
+        -i "$(hostname -I | awk '{print $1}')"
+
+    echo "[tier2] Configuring management server..."
+    cloudstack-setup-management
+
+    systemctl enable cloudstack-management
+    systemctl start  cloudstack-management
+
+    echo "[tier2] Primary management server setup complete."
+    echo "[tier2] CloudStack UI will be available at http://$(hostname -I | awk '{print $1}'):8080/client/"
+
+---
+# ------------------------------------------------------------------
+# UserData – Tier 3: CloudStack additional management servers
+#            Joins existing database (no schema init).
+# ------------------------------------------------------------------
+apiVersion: cloudstackctl/v1
+kind: UserData
+metadata:
+  name: userdata-cs-secondary
+spec:
+  script: |
+    #!/bin/bash
+    set -euo pipefail
+    exec > >(tee /var/log/cloudstack-secondary-init.log) 2>&1
+
+    # ------------------------------------------------------------
+    # Configuration – adjust hostnames if DNS does not resolve them.
+    # ------------------------------------------------------------
+    DB_HOST="${DB_HOST:-cs-db-1}"
+    DB_USER="cloud"
+    DB_PASS="cloud"
+    CS_PRIMARY_HOST="${CS_PRIMARY_HOST:-cs-mgmt-primary-1}"
+
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y
+    apt-get install -y gnupg ncat curl
+
+    echo "[tier3] Adding CloudStack 4.22 repository..."
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.cloudstack.org/release.asc \
+        | gpg --dearmor -o /etc/apt/keyrings/cloudstack.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/cloudstack.gpg] \
+    https://download.cloudstack.org/ubuntu noble 4.22" \
+        > /etc/apt/sources.list.d/cloudstack.list
+
+    apt-get update -y
+    apt-get install -y cloudstack-management cloudstack-usage
+
+    echo "[tier3] Waiting for MySQL on ${DB_HOST}:3306 ..."
+    for i in $(seq 1 60); do
+        if nc -z -w 5 "${DB_HOST}" 3306 2>/dev/null; then
+            echo "[tier3] MySQL is reachable."
+            break
+        fi
+        echo "[tier3] Attempt ${i}/60 – MySQL not yet available, retrying in 10s..."
+        sleep 10
+    done
+
+    echo "[tier3] Waiting for primary management server on ${CS_PRIMARY_HOST}:8080 ..."
+    for i in $(seq 1 90); do
+        if nc -z -w 5 "${CS_PRIMARY_HOST}" 8080 2>/dev/null; then
+            echo "[tier3] Primary management server is reachable."
+            break
+        fi
+        echo "[tier3] Attempt ${i}/90 – primary not yet available, retrying in 20s..."
+        sleep 20
+    done
+
+    echo "[tier3] Configuring CloudStack database connection (no schema init)..."
+    # Connect to the already-initialised database; do NOT pass --deploy-as
+    cloudstack-setup-databases "${DB_USER}:${DB_PASS}@${DB_HOST}" \
+        -i "$(hostname -I | awk '{print $1}')"
+
+    echo "[tier3] Configuring management server..."
+    cloudstack-setup-management
+
+    systemctl enable cloudstack-management
+    systemctl start  cloudstack-management
+
+    echo "[tier3] Secondary management server setup complete."
+    echo "[tier3] CloudStack UI available at http://$(hostname -I | awk '{print $1}'):8080/client/"
+
+---
+# ------------------------------------------------------------------
+# VirtualMachineSpec – shared base for all CloudStack tiers
+# ------------------------------------------------------------------
+apiVersion: cloudstackctl/v1
+kind: VirtualMachineSpec
+metadata:
+  name: cs-base-vmspec
+spec:
+  zone: ref-trl-10000-k-Mu24-wei-zhou
+  template: ubuntu24-cloud-image-root-password-with-tools
+  serviceOffering: Large Instance
+  networks:
+    - vlan-54
+  sshKeys:
+    - wei
+  volumes:
+    - type: root
+      size: 50
+
+---
+# ------------------------------------------------------------------
+# Application – 3-tier CloudStack management cluster
+# ------------------------------------------------------------------
+apiVersion: cloudstackctl/v1
+kind: Application
+metadata:
+  name: apache-cloudstack-mgmt
+spec:
+  components:
+    # ---- Tier 1: MySQL database --------------------------------
+    - name: cs-db
+      virtualMachineSpec: cs-base-vmspec
+      replicas: 1
+      overrides:
+        serviceOffering: Large Instance
+        userDataRefs:
+          - userdata-cs-db
+      healthChecks:
+        - type: tcp
+          port: 3306
+          interval: 30s
+          timeout: 10s
+
+    # ---- Tier 2: Primary management server --------------------
+    - name: cs-mgmt-primary
+      dependsOn: cs-db
+      virtualMachineSpec: cs-base-vmspec
+      replicas: 1
+      overrides:
+        serviceOffering: Large Instance
+        userDataRefs:
+          - userdata-cs-primary
+      healthChecks:
+        - type: http
+          port: 8080
+          path: /client/
+          interval: 30s
+          timeout: 15s
+
+    # ---- Tier 3: Additional management servers ----------------
+    - name: cs-mgmt-secondary
+      dependsOn: cs-mgmt-primary
+      virtualMachineSpec: cs-base-vmspec
+      replicas: 2
+      overrides:
+        serviceOffering: Large Instance
+        userDataRefs:
+          - userdata-cs-secondary
+      healthChecks:
+        - type: http
+          port: 8080
+          path: /client/
+          interval: 30s
+          timeout: 15s
