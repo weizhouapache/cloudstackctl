@@ -178,7 +178,7 @@ func PrintVMsFromController(vms []v1.VirtualMachine) {
 // PrintComponents prints components returned by the controller DB query.
 func PrintComponents(comps []v1.Component) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "COMPONENT\tAPPLICATION\tREPLICAS\tVM SPEC\tSTATE\tOBSERVED REPLICAS\tLAST CHECKED")
+	fmt.Fprintln(w, "COMPONENT\tAPPLICATION\tREPLICAS\tVM SPEC\tSTATE\tOBSERVED REPLICAS\tLAST CHECKED\tCREATED")
 
 	for _, c := range comps {
 		replicas := c.Spec.Replicas
@@ -190,7 +190,11 @@ func PrintComponents(comps []v1.Component) {
 		if !c.Status.LastChecked.IsZero() {
 			last = c.Status.LastChecked.Format(time.RFC3339)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%d\t%s\n", c.Metadata.Name, appNames, replicas, vmSpec, state, observed, last)
+		created := ""
+		if !c.CreatedAt.IsZero() {
+			created = c.CreatedAt.Format(time.RFC3339)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%d\t%s\t%s\n", c.Metadata.Name, appNames, replicas, vmSpec, state, observed, last, created)
 	}
 	w.Flush()
 }
@@ -198,7 +202,7 @@ func PrintComponents(comps []v1.Component) {
 // PrintVMSpecs prints VirtualMachineSpecResource entries in a compact table.
 func PrintVMSpecs(specs []v1.VirtualMachineSpecResource) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "VM SPEC\tTEMPLATE\tSERVICE OFFERING\tNETWORKS\tVOLUMES")
+	fmt.Fprintln(w, "VM SPEC\tTEMPLATE\tSERVICE OFFERING\tNETWORKS\tVOLUMES\tCREATED")
 	for _, s := range specs {
 		tmpl := s.Spec.Template
 		so := s.Spec.ServiceOffering
@@ -217,7 +221,11 @@ func PrintVMSpecs(specs []v1.VirtualMachineSpecResource) {
 				}
 			}
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\n", s.Metadata.Name, tmpl, so, nets, volCount)
+		created := ""
+		if !s.CreatedAt.IsZero() {
+			created = s.CreatedAt.Format(time.RFC3339)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\n", s.Metadata.Name, tmpl, so, nets, volCount, created)
 	}
 	w.Flush()
 }
@@ -225,7 +233,7 @@ func PrintVMSpecs(specs []v1.VirtualMachineSpecResource) {
 // PrintApplications prints applications returned by the controller DB query.
 func PrintApplications(apps []v1.Application) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "APPLICATION\tCOMPONENTS\tSTATE\tREADY\tLAST CHECKED")
+	fmt.Fprintln(w, "APPLICATION\tCOMPONENTS\tSTATE\tREADY\tLAST CHECKED\tCREATED")
 	for _, a := range apps {
 		compNames := ""
 		if len(a.Spec.Components) > 0 {
@@ -238,7 +246,11 @@ func PrintApplications(apps []v1.Application) {
 		if !a.Status.LastChecked.IsZero() {
 			last = a.Status.LastChecked.Format(time.RFC3339)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\n", a.Metadata.Name, compNames, a.Status.ObservedState, a.Status.Ready, last)
+		created := ""
+		if !a.CreatedAt.IsZero() {
+			created = a.CreatedAt.Format(time.RFC3339)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\t%s\n", a.Metadata.Name, compNames, a.Status.ObservedState, a.Status.Ready, last, created)
 	}
 	w.Flush()
 }
