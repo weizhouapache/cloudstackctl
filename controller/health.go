@@ -80,12 +80,18 @@ func (c *Controller) CheckComponentHealth(component *v1.Component) (bool, error)
 
 // CheckVMHealth performs ping/SSH health check for a VM
 func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
-	// If VM is marked Removing, do not update state during health checks.
-	if vm.Status.ObservedState == "Removing" {
+	// State guard: only run health checks for states that require them.
+	switch vm.Status.ObservedState {
+	case "Removing", "", "Created", "Starting", "Error", "VMNotFound":
+		// Not ready, in error, or already gone — skip.
 		return false, nil
+	case "Running":
+		// No health checks configured; VM health is determined by CS hypervisor state alone.
+		return true, nil
 	}
+	// States that reach here: Started, IPNotFound, Healthy, Unhealthy.
 
-	// Skip if VM not created in CloudStack
+	// Skip if VM has no CloudStack ID yet.
 	if vm.CloudStackID == "" {
 		return false, nil
 	}
@@ -128,10 +134,10 @@ func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
 		}
 	}
 
-	// If still no checks defined, consider the VM healthy if it has an IP and is running in CloudStack.
+	// No health checks configured: mark as Running (healthy by hypervisor state alone).
 	if len(checks) == 0 {
-		log.Printf("Health check passed for VM %s (id=%s): no health checks defined, defaulting to healthy", vm.Metadata.Name, vm.CloudStackID)
-		vm.Status.ObservedState = "Healthy"
+		log.Printf("VM %s (id=%s): no health checks defined, marking as Running", vm.Metadata.Name, vm.CloudStackID)
+		vm.Status.ObservedState = "Running"
 		vm.Status.Ready = true
 		vm.Status.LastChecked = time.Now()
 		return true, db.DB.Save(vm).Error
@@ -139,7 +145,13 @@ func (c *Controller) CheckVMHealth(vm *v1.VirtualMachine) (bool, error) {
 
 	if vmIP == "" {
 		log.Printf("no IP address found for VM %s (id=%s)", vm.Metadata.Name, vm.CloudStackID)
-		vm.Status.ObservedState = "IPNotFound"
+		// IPNotFound is transient during startup (Started → IPNotFound).
+		// Once the VM has been Healthy/Unhealthy a missing IP is a health failure.
+		if vm.Status.ObservedState == "Started" || vm.Status.ObservedState == "IPNotFound" {
+			vm.Status.ObservedState = "IPNotFound"
+		} else {
+			vm.Status.ObservedState = "Unhealthy"
+		}
 		vm.Status.Ready = false
 		vm.Status.LastChecked = time.Now()
 		return false, db.DB.Save(vm).Error

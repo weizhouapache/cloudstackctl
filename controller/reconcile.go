@@ -184,6 +184,18 @@ func (c *Controller) ReconcileComponent(comp *v1.Component) error {
 		return nil
 	}
 
+	// Advance the state machine for each VM in this component. This is
+	// required for paths (e.g. waitForComponentHealth) that call
+	// ReconcileComponent directly without first calling ReconcileVM.
+	var compVMs []v1.VirtualMachine
+	if err := db.DB.Where("component = ? AND (observed_state IS NULL OR observed_state <> ?)", comp.Metadata.Name, "Removing").Find(&compVMs).Error; err == nil {
+		for _, vm := range compVMs {
+			if err := c.ReconcileVM(&vm); err != nil {
+				log.Printf("ReconcileComponent: failed to reconcile VM %s: %v", vm.Metadata.Name, err)
+			}
+		}
+	}
+
 	// Check component health
 	healthy, err := c.CheckComponentHealth(comp)
 	if err != nil {
@@ -220,6 +232,32 @@ func (c *Controller) ReconcileVM(vm *v1.VirtualMachine) error {
 		return err
 	}
 
+	// VMNotFound: the CS VM is gone — clear the stale ID and recreate.
+	if vm.Status.ObservedState == "VMNotFound" {
+		log.Printf("ReconcileVM: VM %s not found in CloudStack, clearing ID and recreating", vm.Metadata.Name)
+		vm.CloudStackID = ""
+		vm.Status.ObservedState = "Created"
+		vm.Status.Ready = false
+		if err := db.DB.Save(vm).Error; err != nil {
+			return err
+		}
+	}
+
+	// Stopped: start the VM in CloudStack.
+	if vm.Status.ObservedState == "Stopped" {
+		log.Printf("ReconcileVM: VM %s is Stopped, starting it", vm.Metadata.Name)
+		sp := c.csClient.VirtualMachine.NewStartVirtualMachineParams(vm.CloudStackID)
+		if _, err := c.csClient.VirtualMachine.StartVirtualMachine(sp); err != nil {
+			log.Printf("ReconcileVM: failed to start VM %s: %v", vm.Metadata.Name, err)
+			return err
+		}
+		vm.Status.ObservedState = "Starting"
+		vm.Status.Ready = false
+		if err := db.DB.Save(vm).Error; err != nil {
+			return err
+		}
+	}
+
 	// Check if VM exists; if not, create it
 	if vm.CloudStackID == "" {
 		if id, err := handlers.ApplyVirtualMachineManaged(vm, true); err != nil {
@@ -249,6 +287,21 @@ func (c *Controller) ReconcileVM(vm *v1.VirtualMachine) error {
 	return err
 }
 
+// vmHasHealthChecks returns true if the VM has health checks defined either
+// on its own spec or inherited from its owning component.
+func vmHasHealthChecks(vm *v1.VirtualMachine) bool {
+	if len(vm.Spec.HealthChecks) > 0 {
+		return true
+	}
+	if vm.Component != "" {
+		var comp v1.Component
+		if db.DB.Where("name = ?", vm.Component).First(&comp).Error == nil {
+			return len(comp.Spec.HealthChecks) > 0
+		}
+	}
+	return false
+}
+
 // populateObservedSpec queries CloudStack for VM details and fills ObservedSpec
 func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 	// Use SDK to list by id or name
@@ -264,6 +317,13 @@ func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 		return err
 	}
 	if resp == nil || len(resp.VirtualMachines) == 0 {
+		// VM had a CloudStack ID but is no longer found — mark as VMNotFound.
+		if vm.CloudStackID != "" && vm.Status.ObservedState != "Removing" {
+			vm.Status.ObservedState = "VMNotFound"
+			vm.Status.Ready = false
+			vm.Status.LastChecked = time.Now()
+			return db.DB.Save(vm).Error
+		}
 		return nil
 	}
 
@@ -367,9 +427,51 @@ func (c *Controller) populateObservedSpec(vm *v1.VirtualMachine) error {
 		}
 	}
 
-	// Record observed state
+	// State machine: map CloudStack hypervisor state to controller-managed states.
+	//
+	//  "" / Created  ──(CS ID assigned)──► Starting
+	//  Starting      ──(CS Running)──► Started (has health checks) | Running (no checks)
+	//  Starting      ──(CS Error)──► Error
+	//  Starting      ──(CS Stopped)──► Stopped  (reconciler will start it)
+	//  Error         ──(CS Running)──► Starting  (recovered, re-enter flow)
+	//  Started/IPNotFound/Running/Healthy/Unhealthy ──(CS Stopped)──► Stopped
+	//  Started/IPNotFound/Running/Healthy/Unhealthy ──(CS other non-Running)──► state unchanged
+	//  Removing      ──── never overwritten
+	//  VMNotFound    ──── never overwritten (handled above)
 	if v.State != "" {
-		vm.Status.ObservedState = v.State
+		current := vm.Status.ObservedState
+		switch current {
+		case "Removing", "VMNotFound":
+			// Terminal / in-progress states — never overwrite.
+		case "", "Created":
+			// Initial: CloudStack ID just assigned.
+			vm.Status.ObservedState = "Starting"
+		case "Starting", "Error":
+			switch v.State {
+			case "Running":
+				if vmHasHealthChecks(vm) {
+					vm.Status.ObservedState = "Started"
+				} else {
+					vm.Status.ObservedState = "Running"
+					vm.Status.Ready = true
+				}
+			case "Error":
+				vm.Status.ObservedState = "Error"
+				vm.Status.Ready = false
+			case "Stopped":
+				vm.Status.ObservedState = "Stopped"
+				vm.Status.Ready = false
+				// All other CS transient states ("Starting", etc.) stay in current state.
+			}
+		case "Started", "IPNotFound", "Running", "Healthy", "Unhealthy":
+			// Stable / health-check states.
+			// Only act on Stopped — everything else (transient CS states) leaves
+			// the controller state untouched so health checks continue normally.
+			if v.State == "Stopped" {
+				vm.Status.ObservedState = "Stopped"
+				vm.Status.Ready = false
+			}
+		}
 	}
 
 	vm.ObservedSpec = obs
