@@ -63,7 +63,7 @@ There are two supported mode:
 | Kind                   | Shortnames                               | Description                             | Actions Supported                                                                                         | Kubernetes Equivalent                    |
 | ---------------------- | ---------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | **Application**        | app, apps                                | Full application or service stack       | create, update, delete, get, describe                                                                     | Namespace / Application CRD              |
-| **Component**          | comp, comps                              | Set of VMs for a specific role          | create, update, delete, get, describe, scale                                                              | Deployment / StatefulSet                 |
+| **Component**          | comp, comps                              | Set of VMs for a specific role          | create, update, delete, get, describe                                                                     | Deployment / StatefulSet                 |
 | **VirtualMachine**     | vm, vms                                  | Individual VM instance                  | create, update, delete, get, describe                                                                     | Pod                                      |
 | **VirtualMachineSpec** | vmspec, vmspecs                          | VM specifications for Components        | create, update, delete, get, describe                                                                     | PodTemplateSpec                          |
 | **Network**            | net, nets, network, networks             | CloudStack network                      | create, update, delete, get, describe                                                                     | NetworkPolicy / Service                  |
@@ -145,7 +145,8 @@ spec:
     - name: frontend
       virtualMachineSpec: basic-vm-spec
       overrides:
-        - sshKeys: web
+        sshKeys:
+          - web
       replicas: 2
       healthChecks:
         - type: ping
@@ -205,21 +206,87 @@ Usage notes:
 - To run the CLI in standalone mode (no DB/controller): `./cloudstackctl -s get VirtualMachine` or `./cloudstackctl -s apply -f vm.yaml`.
 - To run in controller mode (default), ensure the controller and Postgres are running; `apply` will send resources to the controller which persists them to the DB and reconciles via CloudStack.
 
+### `get` command flags
+
+| Flag | Short | Description |
+|---|---|---|
+| `--all` | `-A` | (Controller mode, VirtualMachine only) List all VMs from CloudStack including unmanaged ones. Without this flag only DB-managed VMs are returned. |
+| `--application` | `-a` | Filter results by application name. Applies to `Application`, `Component`, and `VirtualMachine` resources in controller mode. |
+
+Examples:
+
+```bash
+# List only managed VMs
+./cloudstackctl get VirtualMachine
+
+# List all VMs from CloudStack (including unmanaged)
+./cloudstackctl get VirtualMachine -A
+
+# List components belonging to a specific application
+./cloudstackctl get Component -a my-app
+```
+
+### `reconcile` command
+
+Trigger on-demand reconciliation for a resource in controller mode:
+
+```bash
+cloudstackctl reconcile <resource-type> <name>
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--wait` | false | Poll until the resource reaches a ready/healthy state |
+| `--timeout` | (seconds) | Maximum time to wait when `--wait` is set |
+| `--interval` | (seconds) | Polling interval when `--wait` is set |
+
+Examples:
+
+```bash
+# Trigger reconciliation for a component
+./cloudstackctl reconcile Component my-backend
+
+# Trigger and wait for the application to become healthy
+./cloudstackctl reconcile Application my-app --wait --timeout 120 --interval 10
+```
+
 ---
 
 # Logging and Troubleshooting
 
 | Component  | Logs / Errors                                                   | Access                                                                     |
 | ---------- | --------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| CLI        | Command output, validation, API responses                       | Console (`--verbose` or `--debug`)                                         |
-| Controller | Reconciliation, CloudStack API, health checks, dependency graph | `kubectl logs <controller-pod>` or `/var/log/cloudstackctl-controller.log` |
+| CLI        | Command output, validation, API responses                       | Console (standard output/error)                                            |
+| Controller | Reconciliation, CloudStack API, health checks, dependency graph | File set by `CONTROLLER_LOG_FILE` (default `/var/log/cloudstackctl-controller.log`), or `kubectl logs <controller-pod>` in Kubernetes |
 | PostgreSQL | Connection or transaction errors                                | Standard PostgreSQL logs                                                   |
 
 **Debugging Tips:**
 
-* CLI: `--verbose` / `--debug` for step-by-step and API payload logs
-* Controller: `DEBUG=true` for full CloudStack API logging
+* CLI: Check stderr output for error details
+* Controller: Set `CONTROLLER_LOG_FILE` to redirect logs; falls back to stdout if the file cannot be opened
 * Check PostgreSQL for DB connection errors
+
+---
+
+# Environment Variables Reference
+
+## CloudStack credentials
+
+| Variable | Required | Description |
+|---|---|---|
+| `CLOUDSTACK_ENDPOINT` | Yes | CloudStack API URL |
+| `CLOUDSTACK_API_KEY` | Yes | CloudStack API key |
+| `CLOUDSTACK_SECRET_KEY` | Yes | CloudStack secret key |
+| `VERIFY_SSL` | No (default: `true`) | Set to `false` to skip TLS verification |
+| `CLOUDSTACK_SECRET_NAME` | No (default: `cloudstack-credentials`) | Kubernetes Secret name for in-cluster credential loading |
+| `CLOUDSTACK_SECRET_NAMESPACE` | No (default: `default`) | Kubernetes namespace for the CloudStack Secret |
+
+## Controller
+
+| Variable | Default | Description |
+|---|---|---|
+| `CONTROLLER_ENDPOINT` | `http://localhost:65426` | URL the CLI uses to reach the controller. Override when the controller is not on localhost. |
+| `CONTROLLER_LOG_FILE` | `/var/log/cloudstackctl-controller.log` | File path for controller log output. Falls back to stdout if the file cannot be opened. |
 
 ---
 
@@ -250,8 +317,27 @@ export PGSSLMODE=disable
 
 # Deployment
 
-* **Local:** See [Local development](Development.md) for setup (uses `kind` cluster for controller and PostgreSQL in examples)
-* **Production:** Kubernetes or VM cluster, CloudStack manages actual VM provisioning
+Controller mode requires two running services alongside the CLI:
+
+| Service | Role |
+|---|---|
+| PostgreSQL | Stores desired and observed state for managed resources |
+| `cloudstackctl-controller` | Reconciles desired state with CloudStack; exposes the HTTP API on port `65426` |
+
+Choose the option that fits your environment — full step-by-step instructions are in [Development.md](Development.md):
+
+| Option | Best for |
+|---|---|
+| [A — Local binaries](Development.md#option-a--local-binaries) | Simplest setup; PostgreSQL and controller run as local processes, no Docker required |
+| [B — Docker / docker-compose](Development.md#option-b--docker--docker-compose) | Fast local setup using containers |
+| [C — kind / Kubernetes](Development.md#option-c--kind-kubernetes) | Test Kubernetes behaviours, or deploy to a production cluster |
+
+## Production notes
+
+* Run the controller as a single replica; it is stateful (holds per-application reconcile tickers).
+* PostgreSQL should use a persistent volume and be backed up regularly — it is the source of truth for desired state.
+* The controller image contains both binaries; the controller entrypoint is `/cloudstackctl-controller`.
+* Point the CLI at a remote controller with `CONTROLLER_ENDPOINT=http://<host>:65426`.
 
 ---
 
