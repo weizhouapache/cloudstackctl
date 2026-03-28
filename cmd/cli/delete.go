@@ -83,7 +83,7 @@ var deleteCmd = &cobra.Command{
 
 				// Cluster mode: send delete request to controller for each resource
 				if body, err := ControllerRequest("POST", "/delete", rawPayload); err != nil {
-					log.Fatalf("Controller delete failed for %s/%s: %v", resourceType, name, err)
+					log.Printf("Controller delete failed for %s/%s: %v", resourceType, name, err)
 				} else {
 					// Remove redundant kind/name from returned JSON
 					var obj map[string]interface{}
