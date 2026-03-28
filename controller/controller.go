@@ -889,7 +889,9 @@ func ensureComponentsForApplication(app *v1.Application) error {
 				Spec: v1.ComponentSpec{
 					VirtualMachineSpec: cref.VirtualMachineSpec,
 					Replicas:           cref.Replicas,
+					MinHealthy:         cref.MinHealthy,
 					HealthChecks:       cref.HealthChecks,
+					Overrides:          cref.Overrides,
 				},
 				Status:      v1.Status{ObservedState: "Starting", Ready: false, LastChecked: time.Now()},
 				Application: app.Metadata.Name,

@@ -42,10 +42,16 @@ type ApplicationSpec struct {
 
 // ComponentRef references a Component within an Application
 type ComponentRef struct {
-	Name               string        `json:"name" yaml:"name"`                             // Component name
-	VirtualMachineSpec string        `json:"virtualMachineSpec" yaml:"virtualMachineSpec"` // Reusable VM spec name
-	Replicas           int           `json:"replicas" yaml:"replicas"`                     // Number of VM replicas
-	HealthChecks       []HealthCheck `json:"healthChecks,omitempty" yaml:"healthChecks,omitempty" gorm:"serializer:json"`
+	Name               string `json:"name" yaml:"name"`                             // Component name
+	VirtualMachineSpec string `json:"virtualMachineSpec" yaml:"virtualMachineSpec"` // Reusable VM spec name
+	Replicas           int    `json:"replicas" yaml:"replicas"`                     // Number of VM replicas
+	// MinHealthy defines the minimum number of healthy VMs required for the component to be
+	// considered healthy. If zero, defaults to Replicas. Propagated to the Component record.
+	MinHealthy   int           `json:"minHealthy,omitempty" yaml:"minHealthy,omitempty"`
+	HealthChecks []HealthCheck `json:"healthChecks,omitempty" yaml:"healthChecks,omitempty" gorm:"serializer:json"`
+	// Overrides allows per-component overrides (e.g. serviceOffering, userDataRefs) defined
+	// inline inside the Application spec, propagated to the Component record on creation.
+	Overrides ComponentOverrides `json:"overrides,omitempty" yaml:"overrides,omitempty" gorm:"serializer:json"`
 	// DependsOn lists component names this component depends on. If set,
 	// the reconciler will wait for the named components to be healthy
 	// before creating or reconciling this component. Values may be a
