@@ -74,6 +74,9 @@ var getCmd = &cobra.Command{
 			if name != "" {
 				q.Set("name", name)
 			}
+			if getApplication != "" && (resourceType == "Application" || resourceType == "Component" || resourceType == "VirtualMachine") {
+				q.Set("application", getApplication)
+			}
 			path := endpoint + "?" + q.Encode()
 			body, err := ControllerRequest("GET", path, nil)
 			if err != nil {
@@ -134,9 +137,11 @@ func init() {
 }
 
 var getAll bool
+var getApplication string
 
 func init() {
 	getCmd.Flags().BoolVarP(&getAll, "all", "A", false, "Show all VMs from CloudStack (include unmanaged) — controller mode only")
+	getCmd.Flags().StringVarP(&getApplication, "application", "a", "", "Filter Application/Component/VirtualMachine results by application name")
 }
 
 // tryDecodeAndPrint attempts to decode controller JSON into known typed

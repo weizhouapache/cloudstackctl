@@ -465,6 +465,7 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := r.URL.Query().Get("kind")
 	name := r.URL.Query().Get("name")
+	appFilter := r.URL.Query().Get("application")
 	switch kind {
 	case "Application":
 		var apps []v1.Application
@@ -472,7 +473,11 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if err := db.DB.Find(&apps).Error; err != nil {
+		q := db.DB
+		if appFilter != "" {
+			q = q.Where("name = ?", appFilter)
+		}
+		if err := q.Find(&apps).Error; err != nil {
 			http.Error(w, "failed to list applications", http.StatusInternalServerError)
 			return
 		}
@@ -487,7 +492,11 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if err := db.DB.Find(&comps).Error; err != nil {
+		q := db.DB
+		if appFilter != "" {
+			q = q.Where("application = ?", appFilter)
+		}
+		if err := q.Find(&comps).Error; err != nil {
 			http.Error(w, "failed to list components", http.StatusInternalServerError)
 			return
 		}
@@ -520,7 +529,11 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if err := db.DB.Find(&vms).Error; err != nil {
+		q := db.DB
+		if appFilter != "" {
+			q = q.Where("application = ?", appFilter)
+		}
+		if err := q.Find(&vms).Error; err != nil {
 			http.Error(w, "failed to list virtualmachines", http.StatusInternalServerError)
 			return
 		}
