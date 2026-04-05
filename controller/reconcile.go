@@ -510,6 +510,22 @@ func (c *Controller) createComponentVMs(appName string, comp *v1.Component, comp
 	for _, vmName := range vmNames {
 		var existing v1.VirtualMachine
 		if err := db.DB.Where("name = ?", vmName).First(&existing).Error; err == nil {
+			changed := false
+			if comp.Metadata.Project != "" {
+				if existing.Metadata.Project != comp.Metadata.Project {
+					existing.Metadata.Project = comp.Metadata.Project
+					changed = true
+				}
+				if existing.Spec.Project != comp.Metadata.Project {
+					existing.Spec.Project = comp.Metadata.Project
+					changed = true
+				}
+			}
+			if changed {
+				if err := db.DB.Save(&existing).Error; err != nil {
+					return err
+				}
+			}
 			// already exists, add pointer to slice
 			e := existing
 			vms = append(vms, &e)
@@ -520,9 +536,12 @@ func (c *Controller) createComponentVMs(appName string, comp *v1.Component, comp
 		vm := &v1.VirtualMachine{
 			APIVersion: v1.APIVersion,
 			Kind:       "VirtualMachine",
-			Metadata:   v1.Metadata{Name: vmName},
+			Metadata:   v1.Metadata{Name: vmName, Project: comp.Metadata.Project},
 			Spec:       effective,
 			Component:  comp.Metadata.Name,
+		}
+		if vm.Spec.Project == "" {
+			vm.Spec.Project = comp.Metadata.Project
 		}
 		if appName != "" {
 			vm.Application = appName

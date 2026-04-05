@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -487,6 +488,11 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 		if appFilter != "" {
 			q = q.Where("name = ?", appFilter)
 		}
+		if projectFilter != "" {
+			q = q.Where("metadata_project = ?", projectFilter)
+		} else if !allProjects {
+			q = q.Where("metadata_project IS NULL OR metadata_project = ''")
+		}
 		if err := q.Find(&apps).Error; err != nil {
 			http.Error(w, "failed to list applications", http.StatusInternalServerError)
 			return
@@ -506,6 +512,29 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 		if appFilter != "" {
 			q = q.Where("application = ?", appFilter)
 		}
+		if projectFilter != "" {
+			var appNames []string
+			if err := db.DB.Model(&v1.Application{}).Where("metadata_project = ?", projectFilter).Pluck("name", &appNames).Error; err != nil {
+				http.Error(w, "failed to filter components by project", http.StatusInternalServerError)
+				return
+			}
+			if len(appNames) > 0 {
+				q = q.Where("application IN ?", appNames)
+			} else {
+				q = q.Where("(application IS NULL OR application = '') AND metadata_project = ?", projectFilter)
+			}
+		} else if !allProjects {
+			var appNames []string
+			if err := db.DB.Model(&v1.Application{}).Where("metadata_project IS NULL OR metadata_project = ''").Pluck("name", &appNames).Error; err != nil {
+				http.Error(w, "failed to filter components by default project scope", http.StatusInternalServerError)
+				return
+			}
+			if len(appNames) > 0 {
+				q = q.Where("application IN ? OR ((application IS NULL OR application = '') AND (metadata_project IS NULL OR metadata_project = ''))", appNames)
+			} else {
+				q = q.Where("(application IS NULL OR application = '') AND (metadata_project IS NULL OR metadata_project = '')")
+			}
+		}
 		if err := q.Find(&comps).Error; err != nil {
 			http.Error(w, "failed to list components", http.StatusInternalServerError)
 			return
@@ -516,7 +545,7 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 		w.Write(b)
 		return
 	case "VirtualMachine":
-		if r.URL.Query().Get("all-vms") == "true" || projectFilter != "" || allProjects {
+		if r.URL.Query().Get("all-vms") == "true" {
 			payload := map[string]interface{}{"kind": "VirtualMachine"}
 			if name != "" {
 				payload["name"] = name
@@ -548,6 +577,29 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 		q := db.DB
 		if appFilter != "" {
 			q = q.Where("application = ?", appFilter)
+		}
+		if projectFilter != "" {
+			var appNames []string
+			if err := db.DB.Model(&v1.Application{}).Where("metadata_project = ?", projectFilter).Pluck("name", &appNames).Error; err != nil {
+				http.Error(w, "failed to filter virtualmachines by project", http.StatusInternalServerError)
+				return
+			}
+			if len(appNames) > 0 {
+				q = q.Where("application IN ? OR ((application IS NULL OR application = '') AND metadata_project = ?)", appNames, projectFilter)
+			} else {
+				q = q.Where("(application IS NULL OR application = '') AND metadata_project = ?", projectFilter)
+			}
+		} else if !allProjects {
+			var appNames []string
+			if err := db.DB.Model(&v1.Application{}).Where("metadata_project IS NULL OR metadata_project = ''").Pluck("name", &appNames).Error; err != nil {
+				http.Error(w, "failed to filter virtualmachines by default project scope", http.StatusInternalServerError)
+				return
+			}
+			if len(appNames) > 0 {
+				q = q.Where("application IN ? OR ((application IS NULL OR application = '') AND (metadata_project IS NULL OR metadata_project = ''))", appNames)
+			} else {
+				q = q.Where("(application IS NULL OR application = '') AND (metadata_project IS NULL OR metadata_project = '')")
+			}
 		}
 		if err := q.Find(&vms).Error; err != nil {
 			http.Error(w, "failed to list virtualmachines", http.StatusInternalServerError)
@@ -940,6 +992,23 @@ func (c *Controller) Apply(resource interface{}) error {
 
 // applyApplication creates/updates an Application resource
 func (c *Controller) applyApplication(app *v1.Application) error {
+	// Accept project in either metadata.project or spec.project and keep them in sync.
+	appProject := strings.TrimSpace(app.Metadata.Project)
+	if appProject == "" {
+		appProject = strings.TrimSpace(app.Spec.Project)
+	}
+	if appProject != "" {
+		app.Metadata.Project = appProject
+		app.Spec.Project = appProject
+	}
+
+	// Upsert: look up an existing record by name so Save() performs an UPDATE
+	// rather than an INSERT (Save with ID=0 always inserts a new row).
+	var existing v1.Application
+	if err := db.DB.Where("name = ?", app.Metadata.Name).First(&existing).Error; err == nil {
+		app.Model = existing.Model
+	}
+
 	// Save desired state to database and mark as Starting.
 	if app.Status.ObservedState == "" {
 		app.Status.ObservedState = "Starting"
@@ -963,6 +1032,11 @@ func (c *Controller) applyApplication(app *v1.Application) error {
 // referenced by the Application if they do not already exist. It also ensures
 // the Component.Application field is set to the owning application name.
 func ensureComponentsForApplication(app *v1.Application) error {
+	appProject := strings.TrimSpace(app.Metadata.Project)
+	if appProject == "" {
+		appProject = strings.TrimSpace(app.Spec.Project)
+	}
+
 	for _, cref := range app.Spec.Components {
 		var comp v1.Component
 		if err := db.DB.Where("name = ?", cref.Name).First(&comp).Error; err != nil {
@@ -970,7 +1044,7 @@ func ensureComponentsForApplication(app *v1.Application) error {
 			comp = v1.Component{
 				APIVersion: v1.APIVersion,
 				Kind:       "Component",
-				Metadata:   v1.Metadata{Name: cref.Name},
+				Metadata:   v1.Metadata{Name: cref.Name, Project: appProject},
 				Spec: v1.ComponentSpec{
 					VirtualMachineSpec: cref.VirtualMachineSpec,
 					Replicas:           cref.Replicas,
@@ -1011,14 +1085,37 @@ func ensureComponentsForApplication(app *v1.Application) error {
 				}
 			}
 
+			if appProject != "" && comp.Metadata.Project != appProject {
+				if err := db.DB.Model(&v1.Component{}).Where("name = ?", comp.Metadata.Name).Update("metadata_project", appProject).Error; err != nil {
+					log.Printf("failed to set component %s project to %s: %v", comp.Metadata.Name, appProject, err)
+					return err
+				}
+				comp.Metadata.Project = appProject
+			}
+
 			// Also ensure existing VM records for this component are linked
 			// to the owning application if they don't already have an owner.
 			var vms []v1.VirtualMachine
 			if err := db.DB.Where("component = ?", comp.Metadata.Name).Find(&vms).Error; err == nil {
 				for _, vm := range vms {
+					changed := false
 					if vm.Application == "" {
 						log.Printf("Linking VM %s to application %s", vm.Metadata.Name, app.Metadata.Name)
-						if err := db.DB.Model(&v1.VirtualMachine{}).Where("name = ?", vm.Metadata.Name).Update("application", app.Metadata.Name).Error; err != nil {
+						vm.Application = app.Metadata.Name
+						changed = true
+					}
+					if appProject != "" {
+						if vm.Metadata.Project != appProject {
+							vm.Metadata.Project = appProject
+							changed = true
+						}
+						if vm.Spec.Project != appProject {
+							vm.Spec.Project = appProject
+							changed = true
+						}
+					}
+					if changed {
+						if err := db.DB.Save(&vm).Error; err != nil {
 							return err
 						}
 					}
@@ -1061,6 +1158,8 @@ func (c *Controller) applyComponent(comp *v1.Component) error {
 		if existing.Application != "" && comp.Application == "" {
 			comp.Application = existing.Application
 		}
+		// Use the existing record's primary key so Save() performs UPDATE
+		comp.Model = existing.Model
 	}
 
 	// Persist desired component with effective spec

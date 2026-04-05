@@ -102,9 +102,8 @@ var getCmd = &cobra.Command{
 				fmt.Printf("\n")
 			}
 
-			// DB-backed VMs are shown in controller mode unless CloudStack-scoped
-			// VM listing is explicitly requested.
-			if resourceType == "VirtualMachine" && !getAllVMs && getProject == "" && !getAllProjects {
+			// DB-backed VMs are shown in controller mode unless --all-vms is set.
+			if resourceType == "VirtualMachine" && !getAllVMs {
 				var vms []v1.VirtualMachine
 				if err := json.Unmarshal(body, &vms); err == nil {
 					handlers.PrintVMsFromController(vms)
