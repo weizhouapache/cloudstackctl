@@ -7,15 +7,21 @@ import (
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
+
+	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 )
 
 // ListVMs queries CloudStack and returns the SDK response for callers to format.
-func ListVMs(name string) (any, error) {
+func ListVMs(name, project string, allProjects bool) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.VirtualMachine.NewListVirtualMachinesParams()
+	if err := setProjectOnParams(params, project); err != nil {
+		return nil, err
+	}
+	setListAllOnParams(params, allProjects)
 	if name != "" {
 		params.SetName(name)
 	}
@@ -27,17 +33,13 @@ func ListVMs(name string) (any, error) {
 }
 
 // DescribeVM prints JSON for a VM identified by name.
-func DescribeVM(name string) (any, error) {
-	client, err := cloudstack.NewClient()
+
+func DescribeVM(name, project string, allProjects bool) (any, error) {
+	respAny, err := ListVMs(name, project, allProjects)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, err
 	}
-	params := client.VirtualMachine.NewListVirtualMachinesParams()
-	params.SetName(name)
-	resp, err := client.VirtualMachine.ListVirtualMachines(params)
-	if err != nil {
-		return nil, fmt.Errorf("cloudstack API error: %w", err)
-	}
+	resp, _ := respAny.(*cs.ListVirtualMachinesResponse)
 	if resp == nil || len(resp.VirtualMachines) == 0 {
 		return nil, fmt.Errorf("vm %s not found", name)
 	}
@@ -45,21 +47,21 @@ func DescribeVM(name string) (any, error) {
 }
 
 // DeleteVM deletes a VM by name in CloudStack.
-func DeleteVM(name string) (string, error) {
-	client, err := cloudstack.NewClient()
+
+func DeleteVM(name, project string) (string, error) {
+	respAny, err := ListVMs(name, project, false)
 	if err != nil {
-		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", err
 	}
-	params := client.VirtualMachine.NewListVirtualMachinesParams()
-	params.SetName(name)
-	resp, err := client.VirtualMachine.ListVirtualMachines(params)
-	if err != nil {
-		return "", fmt.Errorf("cloudstack API error: %w", err)
-	}
+	resp, _ := respAny.(*cs.ListVirtualMachinesResponse)
 	if resp == nil || len(resp.VirtualMachines) == 0 {
 		return "", fmt.Errorf("vm %s not found", name)
 	}
 	vid := resp.VirtualMachines[0].Id
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
 	delp := client.VirtualMachine.NewDestroyVirtualMachineParams(vid)
 	delp.SetExpunge(true) // Permanently remove the VM instead of just stopping it
 	if _, err := client.VirtualMachine.DestroyVirtualMachine(delp); err != nil {

@@ -16,6 +16,15 @@ func ApplyCloudStackResource(raw []byte) (string, error) {
 	if err := json.Unmarshal(raw, &meta); err != nil {
 		return "", fmt.Errorf("invalid resource JSON: %w", err)
 	}
+	if p, ok := meta["project"].(string); ok && p != "" {
+		if m, ok := meta["metadata"].(map[string]interface{}); ok {
+			if _, hasProject := m["project"]; !hasProject {
+				m["project"] = p
+				meta["metadata"] = m
+				raw, _ = json.Marshal(meta)
+			}
+		}
+	}
 	kind, _ := meta["kind"].(string)
 
 	switch kind {
@@ -23,6 +32,9 @@ func ApplyCloudStackResource(raw []byte) (string, error) {
 		var vm v1.VirtualMachine
 		if err := json.Unmarshal(raw, &vm); err != nil {
 			return "", fmt.Errorf("failed to parse VirtualMachine: %w", err)
+		}
+		if vm.Spec.Project == "" {
+			vm.Spec.Project = vm.Metadata.Project
 		}
 		id, err := ApplyVirtualMachine(&vm)
 		if err != nil {
@@ -89,6 +101,21 @@ func ApplyCloudStackResource(raw []byte) (string, error) {
 			return "", err
 		}
 		return id, nil
+	case "Project":
+		var payload map[string]interface{}
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return "", fmt.Errorf("failed to parse Project: %w", err)
+		}
+		meta, _ := payload["metadata"].(map[string]interface{})
+		name, _ := meta["name"].(string)
+		displayText := ""
+		if spec, ok := payload["spec"].(map[string]interface{}); ok {
+			displayText, _ = spec["displayText"].(string)
+		}
+		if anns, ok := meta["annotations"].(map[string]interface{}); ok && displayText == "" {
+			displayText, _ = anns["displayText"].(string)
+		}
+		return ApplyProject(name, displayText)
 	default:
 		return "", fmt.Errorf("unsupported resource kind for cloudstack apply: %s", kind)
 	}

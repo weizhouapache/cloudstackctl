@@ -52,6 +52,7 @@ There are two supported mode:
 | AffinityGroup | ✅ | ✅ |
 | SSHKey | ✅ | ✅ |
 | UserData | ✅ | ✅ |
+| Project | ✅ | ✅ |
 | Application | ❌ | ✅ |
 | Component | ❌ | ✅ |
 | VirtualMachineSpec | ❌ | ✅ |
@@ -72,6 +73,7 @@ There are two supported mode:
 | **UserData**           | userdata, ud, uds                        | User data scripts for VM initialization | create, update, delete, get, describe                                                                     | ConfigMap / Secret                       |
 | **AffinityGroup**      | ag, affinitygroup, affinitygroups        | Host/VM affinity or anti-affinity       | create, update, delete, get, describe                                                                     | PodAffinity / PodAntiAffinity            |
 | **SecurityGroup**      | sg, sgs, securitygroup, securitygroups   | Firewall rules for VMs                  | create, update, delete, get, describe                                                                     | NetworkPolicy                            |
+| **Project**            | proj, projs, project, projects           | CloudStack project (resource boundary)  | create, delete, get, describe                                                                             | Namespace                                |
 
 ---
 
@@ -210,7 +212,9 @@ Usage notes:
 
 | Flag | Short | Description |
 |---|---|---|
-| `--all` | `-A` | (Controller mode, VirtualMachine only) List all VMs from CloudStack including unmanaged ones. Without this flag only DB-managed VMs are returned. |
+| `--all-vms` | `-A` | (Controller mode, VirtualMachine only) List all VMs from CloudStack including unmanaged ones. Without this flag only DB-managed VMs are returned. |
+| `--all-projects` | `-P` | List resources across all CloudStack projects (and resources not in any project). |
+| `--project` | `-p` | Filter results to a specific CloudStack project by name. |
 | `--application` | `-a` | Filter results by application name. Applies to `Application`, `Component`, and `VirtualMachine` resources in controller mode. |
 
 Examples:
@@ -222,11 +226,43 @@ Examples:
 # List all VMs from CloudStack (including unmanaged)
 ./cloudstackctl get VirtualMachine -A
 
+# List VMs in a specific project
+./cloudstackctl get VirtualMachine -p my-project
+
+# List VMs across all projects
+./cloudstackctl get VirtualMachine -P
+
+# List all projects
+./cloudstackctl get Project
+
 # List components belonging to a specific application
 ./cloudstackctl get Component -a my-app
 ```
 
-### `reconcile` command
+### `describe` command flags
+
+| Flag | Short | Description |
+|---|---|---|
+| `--all-vms` | `-A` | (Controller mode, VirtualMachine only) Describe a VM directly from CloudStack rather than from the DB. |
+| `--project` | `-p` | Look up the resource within a specific CloudStack project by name. |
+
+Examples:
+
+```bash
+# Describe a managed VM from the DB
+./cloudstackctl describe VirtualMachine my-vm
+
+# Describe a VM directly from CloudStack
+./cloudstackctl describe VirtualMachine my-vm -A
+
+# Describe a network inside a project
+./cloudstackctl describe Network my-net -p my-project
+
+# Describe a project
+./cloudstackctl describe Project my-project
+```
+
+### `reconcile` command (TODO)
 
 Trigger on-demand reconciliation for a resource in controller mode:
 
@@ -345,7 +381,6 @@ Choose the option that fits your environment — full step-by-step instructions 
 
 * CLI: Support resource update via YAML file
 * CLI: Support Rolling updates
-* CLI: Support CloudStack users and projects
 * CLI: Multi-zone deployments
 * CLI: Security group improvements
 * CLI: Support UserData details

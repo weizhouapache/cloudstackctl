@@ -17,6 +17,8 @@ func GetCloudStackResource(raw []byte) (any, error) {
 	}
 
 	kind, _ := meta["kind"].(string)
+	project, _ := meta["project"].(string)
+	allProjects, _ := meta["allProjects"].(bool)
 
 	// Extract name from top-level `name` or `metadata.name` if present
 	name := ""
@@ -31,21 +33,23 @@ func GetCloudStackResource(raw []byte) (any, error) {
 
 	switch kind {
 	case "VirtualMachine":
-		return ListVMs(name)
+		return ListVMs(name, project, allProjects)
 	case "Network":
-		return ListNetworks(name)
+		return ListNetworks(name, project, allProjects)
 	case "Template":
-		return ListTemplates(name)
+		return ListTemplates(name, project, allProjects)
 	case "Volume":
-		return ListVolumes(name)
+		return ListVolumes(name, project, allProjects)
 	case "SSHKey":
-		return ListSSHKeys(name)
+		return ListSSHKeys(name, project, allProjects)
 	case "SecurityGroup":
-		return ListSecurityGroups(name)
+		return ListSecurityGroups(name, project, allProjects)
 	case "AffinityGroup":
-		return ListAffinityGroups(name)
+		return ListAffinityGroups(name, project, allProjects)
 	case "UserData":
-		return ListUserData(name)
+		return ListUserData(name, project, allProjects)
+	case "Project":
+		return ListProjects(name)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for cloudstack get: %s", kind)
 	}

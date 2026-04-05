@@ -8,6 +8,8 @@ import (
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
+
+	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 )
 
 // ResolveNetwork returns the CloudStack network ID for a given network name.
@@ -34,12 +36,16 @@ func ResolveNetwork(name string) (string, error) {
 }
 
 // ListNetworks queries CloudStack and prints a table of networks.
-func ListNetworks(name string) (any, error) {
+func ListNetworks(name, project string, allProjects bool) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Network.NewListNetworksParams()
+	if err := setProjectOnParams(params, project); err != nil {
+		return nil, err
+	}
+	setListAllOnParams(params, allProjects)
 	if name != "" {
 		params.SetName(name)
 	}
@@ -51,17 +57,12 @@ func ListNetworks(name string) (any, error) {
 }
 
 // DescribeNetwork prints JSON for a single network identified by name.
-func DescribeNetwork(name string) (any, error) {
-	client, err := cloudstack.NewClient()
+func DescribeNetwork(name, project string, allProjects bool) (any, error) {
+	respAny, err := ListNetworks(name, project, allProjects)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, err
 	}
-	params := client.Network.NewListNetworksParams()
-	params.SetName(name)
-	resp, err := client.Network.ListNetworks(params)
-	if err != nil {
-		return nil, fmt.Errorf("cloudstack API error: %w", err)
-	}
+	resp, _ := respAny.(*cs.ListNetworksResponse)
 	if resp == nil || len(resp.Networks) == 0 {
 		return nil, fmt.Errorf("network %s not found", name)
 	}
@@ -69,21 +70,20 @@ func DescribeNetwork(name string) (any, error) {
 }
 
 // DeleteNetwork deletes a network by name via CloudStack API.
-func DeleteNetwork(name string) (string, error) {
-	client, err := cloudstack.NewClient()
+func DeleteNetwork(name, project string) (string, error) {
+	respAny, err := ListNetworks(name, project, false)
 	if err != nil {
-		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", err
 	}
-	params := client.Network.NewListNetworksParams()
-	params.SetName(name)
-	resp, err := client.Network.ListNetworks(params)
-	if err != nil {
-		return "", fmt.Errorf("cloudstack API error: %w", err)
-	}
+	resp, _ := respAny.(*cs.ListNetworksResponse)
 	if resp == nil || len(resp.Networks) == 0 {
 		return "", fmt.Errorf("network %s not found", name)
 	}
 	nid := resp.Networks[0].Id
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
 	delp := client.Network.NewDeleteNetworkParams(nid)
 	if _, err := client.Network.DeleteNetwork(delp); err != nil {
 		return "", fmt.Errorf("failed to delete network %s: %w", name, err)
@@ -111,6 +111,9 @@ func ApplyNetwork(netRes *v1.Network) (string, error) {
 	listParams := client.Network.NewListNetworksParams()
 	listParams.SetName(name)
 	listParams.SetListall(true)
+	if err := setProjectOnParams(listParams, netRes.Metadata.Project); err != nil {
+		return "", err
+	}
 	listResp, err := client.Network.ListNetworks(listParams)
 	if err != nil {
 		return "", fmt.Errorf("failed to list networks: %w", err)
@@ -132,6 +135,9 @@ func ApplyNetwork(netRes *v1.Network) (string, error) {
 			return "", fmt.Errorf("failed to resolve network offering %s: %w", netRes.Spec.NetworkOffering, offErr)
 		}
 		createParams := client.Network.NewCreateNetworkParams(name, offeringID, zoneID)
+		if err := setProjectOnParams(createParams, netRes.Metadata.Project); err != nil {
+			return "", err
+		}
 		if netRes.Spec.Description != "" {
 			createParams.SetDisplaytext(netRes.Spec.Description)
 		}

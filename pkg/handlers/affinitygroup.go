@@ -6,6 +6,8 @@ import (
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
+
+	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 )
 
 // ApplyAffinityGroup ensures the AffinityGroup exists in CloudStack and creates
@@ -31,6 +33,9 @@ func ApplyAffinityGroup(ag *v1.AffinityGroup) (string, error) {
 		return "", fmt.Errorf("affinitygroup spec.type is required for creation")
 	}
 	p := client.AffinityGroup.NewCreateAffinityGroupParams(name, ag.Spec.Type)
+	if err := setProjectOnParams(p, ag.Metadata.Project); err != nil {
+		return "", err
+	}
 	resp, err := client.AffinityGroup.CreateAffinityGroup(p)
 	if err != nil {
 		return "", fmt.Errorf("failed to create affinity group: %w", err)
@@ -39,12 +44,16 @@ func ApplyAffinityGroup(ag *v1.AffinityGroup) (string, error) {
 }
 
 // ListAffinityGroups lists affinity groups in CloudStack.
-func ListAffinityGroups(name string) (any, error) {
+func ListAffinityGroups(name, project string, allProjects bool) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.AffinityGroup.NewListAffinityGroupsParams()
+	if err := setProjectOnParams(params, project); err != nil {
+		return nil, err
+	}
+	setListAllOnParams(params, allProjects)
 	if name != "" {
 		params.SetName(name)
 	}
@@ -56,17 +65,12 @@ func ListAffinityGroups(name string) (any, error) {
 }
 
 // DescribeAffinityGroup returns the affinity group object from CloudStack by name.
-func DescribeAffinityGroup(name string) (any, error) {
-	client, err := cloudstack.NewClient()
+func DescribeAffinityGroup(name, project string, allProjects bool) (any, error) {
+	respAny, err := ListAffinityGroups(name, project, allProjects)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, err
 	}
-	params := client.AffinityGroup.NewListAffinityGroupsParams()
-	params.SetName(name)
-	resp, err := client.AffinityGroup.ListAffinityGroups(params)
-	if err != nil {
-		return nil, fmt.Errorf("cloudstack API error: %w", err)
-	}
+	resp, _ := respAny.(*cs.ListAffinityGroupsResponse)
 	if resp == nil || len(resp.AffinityGroups) == 0 {
 		return nil, fmt.Errorf("affinity group %s not found", name)
 	}
@@ -95,20 +99,25 @@ func ResolveAffinityGroup(name string) (string, error) {
 }
 
 // DeleteAffinityGroup deletes an affinity group by name.
-func DeleteAffinityGroup(name string) (string, error) {
+func DeleteAffinityGroup(name, project string) (string, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
-	existing, _, err := client.AffinityGroup.GetAffinityGroupByName(name)
+	respAny, err := ListAffinityGroups(name, project, false)
 	if err != nil {
-		return "", fmt.Errorf("cloudstack API error: %w", err)
+		return "", err
 	}
-	if existing == nil {
+	resp, _ := respAny.(*cs.ListAffinityGroupsResponse)
+	if resp == nil || len(resp.AffinityGroups) == 0 {
 		return "", fmt.Errorf("affinity group %s not found", name)
 	}
+	existing := resp.AffinityGroups[0]
 	dp := client.AffinityGroup.NewDeleteAffinityGroupParams()
 	dp.SetId(existing.Id)
+	if err := setProjectOnParams(dp, project); err != nil {
+		return "", err
+	}
 	if _, err := client.AffinityGroup.DeleteAffinityGroup(dp); err != nil {
 		return "", fmt.Errorf("failed to delete affinity group %s: %w", name, err)
 	}

@@ -12,6 +12,7 @@ const APIVersion = "cloudstackctl/v1"
 // Metadata contains resource metadata (name/labels/annotations)
 type Metadata struct {
 	Name        string            `json:"name" yaml:"name"`
+	Project     string            `json:"project,omitempty" yaml:"project,omitempty" gorm:"column:metadata_project"`
 	Labels      map[string]string `json:"labels,omitempty" yaml:"labels,omitempty" gorm:"serializer:json"`
 	Annotations map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty" gorm:"serializer:json"`
 }

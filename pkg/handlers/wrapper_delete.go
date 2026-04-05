@@ -15,6 +15,7 @@ func DeleteCloudStackResource(raw []byte) (string, error) {
 	}
 
 	kind, _ := meta["kind"].(string)
+	project, _ := meta["project"].(string)
 	name := ""
 	if n, ok := meta["name"].(string); ok {
 		name = n
@@ -31,43 +32,43 @@ func DeleteCloudStackResource(raw []byte) (string, error) {
 
 	switch kind {
 	case "VirtualMachine":
-		id, err := DeleteVM(name)
+		id, err := DeleteVM(name, project)
 		if err != nil {
 			return "", err
 		}
 		return id, nil
 	case "Network":
-		id, err := DeleteNetwork(name)
+		id, err := DeleteNetwork(name, project)
 		if err != nil {
 			return "", err
 		}
 		return id, nil
 	case "Volume":
-		id, err := DeleteVolume(name)
+		id, err := DeleteVolume(name, project)
 		if err != nil {
 			return "", err
 		}
 		return id, nil
 	case "SSHKey":
-		id, err := DeleteSSHKey(name)
+		id, err := DeleteSSHKey(name, project)
 		if err != nil {
 			return "", err
 		}
 		return id, nil
 	case "SecurityGroup":
-		id, err := DeleteSecurityGroup(name)
+		id, err := DeleteSecurityGroup(name, project)
 		if err != nil {
 			return "", err
 		}
 		return id, nil
 	case "AffinityGroup":
-		id, err := DeleteAffinityGroup(name)
+		id, err := DeleteAffinityGroup(name, project)
 		if err != nil {
 			return "", err
 		}
 		return id, nil
 	case "Template":
-		id, err := DeleteTemplate(name)
+		id, err := DeleteTemplate(name, project)
 		if err != nil {
 			return "", err
 		}
@@ -79,7 +80,13 @@ func DeleteCloudStackResource(raw []byte) (string, error) {
 		}
 		return id, nil
 	case "UserData":
-		id, err := DeleteUserData(name)
+		id, err := DeleteUserData(name, project)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
+	case "Project":
+		id, err := DeleteProject(name)
 		if err != nil {
 			return "", err
 		}

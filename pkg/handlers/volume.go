@@ -11,12 +11,16 @@ import (
 )
 
 // ListVolumes prints a table of volumes.
-func ListVolumes(name string) (any, error) {
+func ListVolumes(name, project string, allProjects bool) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.Volume.NewListVolumesParams()
+	if err := setProjectOnParams(params, project); err != nil {
+		return nil, err
+	}
+	setListAllOnParams(params, allProjects)
 	if name != "" {
 		params.SetName(name)
 	}
@@ -28,17 +32,12 @@ func ListVolumes(name string) (any, error) {
 }
 
 // DescribeVolume returns the volume object from CloudStack by name.
-func DescribeVolume(name string) (any, error) {
-	client, err := cloudstack.NewClient()
+func DescribeVolume(name, project string, allProjects bool) (any, error) {
+	respAny, err := ListVolumes(name, project, allProjects)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, err
 	}
-	params := client.Volume.NewListVolumesParams()
-	params.SetName(name)
-	resp, err := client.Volume.ListVolumes(params)
-	if err != nil {
-		return nil, fmt.Errorf("cloudstack API error: %w", err)
-	}
+	resp, _ := respAny.(*cs.ListVolumesResponse)
 	if resp == nil || len(resp.Volumes) == 0 {
 		return nil, fmt.Errorf("volume %s not found", name)
 	}
@@ -46,21 +45,20 @@ func DescribeVolume(name string) (any, error) {
 }
 
 // DeleteVolume deletes a volume by name and returns the deleted CloudStack ID.
-func DeleteVolume(name string) (string, error) {
-	client, err := cloudstack.NewClient()
+func DeleteVolume(name, project string) (string, error) {
+	respAny, err := ListVolumes(name, project, false)
 	if err != nil {
-		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+		return "", err
 	}
-	params := client.Volume.NewListVolumesParams()
-	params.SetName(name)
-	resp, err := client.Volume.ListVolumes(params)
-	if err != nil {
-		return "", fmt.Errorf("cloudstack API error: %w", err)
-	}
+	resp, _ := respAny.(*cs.ListVolumesResponse)
 	if resp == nil || len(resp.Volumes) == 0 {
 		return "", fmt.Errorf("volume %s not found", name)
 	}
 	vid := resp.Volumes[0].Id
+	client, err := cloudstack.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
+	}
 	dp := client.Volume.NewDeleteVolumeParams(vid)
 	if _, err := client.Volume.DeleteVolume(dp); err != nil {
 		return "", fmt.Errorf("failed to delete volume %s: %w", name, err)
@@ -81,6 +79,9 @@ func ApplyVolume(vol *v1.Volume) (string, error) {
 	// Try discovery first
 	params := client.Volume.NewListVolumesParams()
 	params.SetName(vol.Metadata.Name)
+	if err := setProjectOnParams(params, vol.Metadata.Project); err != nil {
+		return "", err
+	}
 	resp, err := client.Volume.ListVolumes(params)
 	if err == nil && resp != nil && len(resp.Volumes) > 0 {
 		return "", fmt.Errorf("volume %s already exists in CloudStack (id=%s); updates are not supported", vol.Metadata.Name, resp.Volumes[0].Id)
@@ -95,6 +96,9 @@ func ApplyVolume(vol *v1.Volume) (string, error) {
 
 		cp := client.Volume.NewCreateVolumeParams()
 		cp.SetName(vol.Metadata.Name)
+		if err := setProjectOnParams(cp, vol.Metadata.Project); err != nil {
+			return "", err
+		}
 		cp.SetDiskofferingid(diskOfferingID)
 		if vol.Spec.SizeGB > 0 {
 			cp.SetSize(int64(vol.Spec.SizeGB))

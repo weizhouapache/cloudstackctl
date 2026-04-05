@@ -26,11 +26,17 @@ var describeCmd = &cobra.Command{
 
 		// Certain managed kinds are only supported via the controller
 		if standalone {
+			if describeAllVMs {
+				log.Fatal("--all-vms/-A is supported in controller mode only")
+			}
 			if resourceType == "Application" || resourceType == "Component" || resourceType == "VirtualMachineSpec" {
 				log.Fatalf("'%s' is not supported in standalone mode", resourceType)
 			}
 			// Standalone: use local describe wrapper
-			payload := map[string]string{"kind": resourceType, "name": name}
+			payload := map[string]interface{}{"kind": resourceType, "name": name}
+			if describeProject != "" {
+				payload["project"] = describeProject
+			}
 			raw, _ := json.Marshal(payload)
 			if respAny, err := handlers.DescribeCloudStackResource(raw); err != nil {
 				log.Fatalf("Local describe failed: %v", err)
@@ -54,8 +60,11 @@ var describeCmd = &cobra.Command{
 		q := url.Values{}
 		q.Set("kind", resourceType)
 		q.Set("name", name)
-		if describeAll {
-			q.Set("all", "true")
+		if describeProject != "" {
+			q.Set("project", describeProject)
+		}
+		if describeAllVMs && resourceType == "VirtualMachine" {
+			q.Set("all-vms", "true")
 		}
 		path := "/describe?" + q.Encode()
 		body, err := ControllerRequest("GET", path, nil)
@@ -81,8 +90,10 @@ func init() {
 	rootCmd.AddCommand(describeCmd)
 }
 
-var describeAll bool
+var describeAllVMs bool
+var describeProject string
 
 func init() {
-	describeCmd.Flags().BoolVarP(&describeAll, "all", "A", false, "Describe a VM from CloudStack (controller mode only)")
+	describeCmd.Flags().BoolVarP(&describeAllVMs, "all-vms", "A", false, "Describe a VM directly from CloudStack (controller mode only)")
+	describeCmd.Flags().StringVarP(&describeProject, "project", "p", "", "Look up resource within a specific CloudStack project")
 }

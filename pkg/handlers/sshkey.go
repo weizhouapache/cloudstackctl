@@ -6,15 +6,21 @@ import (
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
+
+	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 )
 
 // ListSSHKeys lists SSH key pairs and returns the SDK response for callers to format.
-func ListSSHKeys(name string) (any, error) {
+func ListSSHKeys(name, project string, allProjects bool) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 	params := client.SSH.NewListSSHKeyPairsParams()
+	if err := setProjectOnParams(params, project); err != nil {
+		return nil, err
+	}
+	setListAllOnParams(params, allProjects)
 	if name != "" {
 		params.SetName(name)
 	}
@@ -26,19 +32,12 @@ func ListSSHKeys(name string) (any, error) {
 }
 
 // DescribeSSHKey returns the SSH keypair object from CloudStack by name.
-func DescribeSSHKey(name string) (any, error) {
-	client, err := cloudstack.NewClient()
+func DescribeSSHKey(name, project string, allProjects bool) (any, error) {
+	respAny, err := ListSSHKeys(name, project, allProjects)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, err
 	}
-	params := client.SSH.NewListSSHKeyPairsParams()
-	if name != "" {
-		params.SetName(name)
-	}
-	resp, err := client.SSH.ListSSHKeyPairs(params)
-	if err != nil {
-		return nil, fmt.Errorf("cloudstack API error: %w", err)
-	}
+	resp, _ := respAny.(*cs.ListSSHKeyPairsResponse)
 	if resp == nil || len(resp.SSHKeyPairs) == 0 {
 		return nil, fmt.Errorf("ssh key %s not found", name)
 	}
@@ -46,23 +45,23 @@ func DescribeSSHKey(name string) (any, error) {
 }
 
 // DeleteSSHKey deletes an SSH key by name.
-func DeleteSSHKey(name string) (string, error) {
+func DeleteSSHKey(name, project string) (string, error) {
+	respAny, err := ListSSHKeys(name, project, false)
+	if err != nil {
+		return "", err
+	}
+	resp, _ := respAny.(*cs.ListSSHKeyPairsResponse)
+	if resp == nil || len(resp.SSHKeyPairs) == 0 {
+		return "", fmt.Errorf("ssh key %s not found", name)
+	}
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
-	params := client.SSH.NewListSSHKeyPairsParams()
-	if name != "" {
-		params.SetName(name)
-	}
-	resp, err := client.SSH.ListSSHKeyPairs(params)
-	if err != nil {
-		return "", fmt.Errorf("cloudstack API error: %w", err)
-	}
-	if resp == nil || len(resp.SSHKeyPairs) == 0 {
-		return "", fmt.Errorf("ssh key %s not found", name)
-	}
 	dp := client.SSH.NewDeleteSSHKeyPairParams(name)
+	if err := setProjectOnParams(dp, project); err != nil {
+		return "", err
+	}
 	if _, err := client.SSH.DeleteSSHKeyPair(dp); err != nil {
 		return "", fmt.Errorf("failed to delete ssh key %s: %w", name, err)
 	}
@@ -85,6 +84,9 @@ func ApplySSHKey(key *v1.SSHKey) (string, error) {
 	// Check if key already exists by name
 	listParams := client.SSH.NewListSSHKeyPairsParams()
 	listParams.SetName(key.Metadata.Name)
+	if err := setProjectOnParams(listParams, key.Metadata.Project); err != nil {
+		return "", err
+	}
 	resp, err := client.SSH.ListSSHKeyPairs(listParams)
 	if err != nil {
 		return "", fmt.Errorf("cloudstack API error: %w", err)
@@ -99,6 +101,9 @@ func ApplySSHKey(key *v1.SSHKey) (string, error) {
 	}
 
 	regParams := client.SSH.NewRegisterSSHKeyPairParams(key.Metadata.Name, key.Spec.PublicKey)
+	if err := setProjectOnParams(regParams, key.Metadata.Project); err != nil {
+		return "", err
+	}
 	if _, err := client.SSH.RegisterSSHKeyPair(regParams); err != nil {
 		return "", fmt.Errorf("failed to register ssh key %s: %w", key.Metadata.Name, err)
 	}

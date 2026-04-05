@@ -108,6 +108,13 @@ The controller creates/migrates its database tables on startup and listens on `:
 ```bash
 ./cloudstackctl apply -f application.yaml
 ./cloudstackctl get Application
+
+# Get/describe CloudStack resources (standalone or controller mode)
+./cloudstackctl get Project                          # list all projects
+./cloudstackctl get VirtualMachine -p my-project     # VMs in a project
+./cloudstackctl get VirtualMachine -P                # VMs across all projects
+./cloudstackctl get VirtualMachine -A                # all VMs incl. unmanaged (controller only)
+./cloudstackctl describe Network my-net -p my-project
 ```
 
 ---

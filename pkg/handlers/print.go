@@ -89,6 +89,16 @@ func PrintCloudStackResource(kind string, obj any) error {
 			w.Flush()
 			return nil
 		}
+	case "Project":
+		if resp, ok := obj.(*cs.ListProjectsResponse); ok {
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "PROJECT\tID\tSTATE\tDISPLAY TEXT")
+			for _, p := range resp.Projects {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, p.Id, p.State, p.Displaytext)
+			}
+			w.Flush()
+			return nil
+		}
 	}
 
 	// Fallback: pretty-print JSON for unknown kinds or unexpected types

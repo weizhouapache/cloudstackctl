@@ -39,15 +39,24 @@ var getCmd = &cobra.Command{
 		// Standalone: call local handler wrapper. If any requested kind is
 		// managed by the controller, fail in standalone mode.
 		if standalone {
+			if getAllVMs {
+				log.Fatal("--all-vms/-A is supported in controller mode only")
+			}
 			for _, resourceType := range kinds {
 				if resourceType == "Application" || resourceType == "Component" || resourceType == "VirtualMachineSpec" {
 					log.Fatalf("'%s' is not supported in standalone mode", resourceType)
 				}
 			}
 			for i, resourceType := range kinds {
-				payload := map[string]string{"kind": resourceType}
+				payload := map[string]interface{}{"kind": resourceType}
 				if name != "" {
 					payload["name"] = name
+				}
+				if getProject != "" {
+					payload["project"] = getProject
+				}
+				if getAllProjects {
+					payload["allProjects"] = true
 				}
 				raw, _ := json.Marshal(payload)
 				if resp, err := handlers.GetCloudStackResource(raw); err != nil {
@@ -67,12 +76,18 @@ var getCmd = &cobra.Command{
 		for i, resourceType := range kinds {
 			var endpoint = "/list"
 			q := url.Values{}
-			if getAll && resourceType == "VirtualMachine" {
-				q.Set("all", "true")
-			}
 			q.Set("kind", resourceType)
 			if name != "" {
 				q.Set("name", name)
+			}
+			if getProject != "" {
+				q.Set("project", getProject)
+			}
+			if getAllProjects {
+				q.Set("all-projects", "true")
+			}
+			if getAllVMs && resourceType == "VirtualMachine" {
+				q.Set("all-vms", "true")
 			}
 			if getApplication != "" && (resourceType == "Application" || resourceType == "Component" || resourceType == "VirtualMachine") {
 				q.Set("application", getApplication)
@@ -87,8 +102,9 @@ var getCmd = &cobra.Command{
 				fmt.Printf("\n")
 			}
 
-			// If controller returned VM objects from DB, pretty-print them
-			if resourceType == "VirtualMachine" && !getAll {
+			// DB-backed VMs are shown in controller mode unless CloudStack-scoped
+			// VM listing is explicitly requested.
+			if resourceType == "VirtualMachine" && !getAllVMs && getProject == "" && !getAllProjects {
 				var vms []v1.VirtualMachine
 				if err := json.Unmarshal(body, &vms); err == nil {
 					handlers.PrintVMsFromController(vms)
@@ -136,11 +152,15 @@ func init() {
 	rootCmd.AddCommand(getCmd)
 }
 
-var getAll bool
+var getAllVMs bool
+var getAllProjects bool
+var getProject string
 var getApplication string
 
 func init() {
-	getCmd.Flags().BoolVarP(&getAll, "all", "A", false, "Show all VMs from CloudStack (include unmanaged) — controller mode only")
+	getCmd.Flags().BoolVarP(&getAllVMs, "all-vms", "A", false, "Show all VMs from CloudStack (include unmanaged) - controller mode only")
+	getCmd.Flags().BoolVarP(&getAllProjects, "all-projects", "P", false, "List resources across all projects (and no project)")
+	getCmd.Flags().StringVarP(&getProject, "project", "p", "", "Filter results by project name")
 	getCmd.Flags().StringVarP(&getApplication, "application", "a", "", "Filter Application/Component/VirtualMachine results by application name")
 }
 
@@ -195,6 +215,12 @@ func tryDecodeAndPrint(resourceType string, body []byte) bool {
 		}
 	case "UserData":
 		var resp cs.ListUserDataResponse
+		if err := json.Unmarshal(body, &resp); err == nil {
+			handlers.PrintCloudStackResource(resourceType, &resp)
+			return true
+		}
+	case "Project":
+		var resp cs.ListProjectsResponse
 		if err := json.Unmarshal(body, &resp); err == nil {
 			handlers.PrintCloudStackResource(resourceType, &resp)
 			return true

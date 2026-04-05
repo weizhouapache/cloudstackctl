@@ -33,6 +33,8 @@ func normalizeResourceType(s string) string {
 		return "AffinityGroup"
 	case "sg", "sgs", "securitygroup", "securitygroups":
 		return "SecurityGroup"
+	case "proj", "projs", "project", "projects":
+		return "Project"
 	default:
 		return s
 	}

@@ -15,6 +15,8 @@ func DescribeCloudStackResource(raw []byte) (any, error) {
 	}
 
 	kind, _ := meta["kind"].(string)
+	project, _ := meta["project"].(string)
+	allProjects, _ := meta["allProjects"].(bool)
 	name := ""
 	if n, ok := meta["name"].(string); ok {
 		name = n
@@ -31,23 +33,25 @@ func DescribeCloudStackResource(raw []byte) (any, error) {
 
 	switch kind {
 	case "VirtualMachine":
-		return DescribeVM(name)
+		return DescribeVM(name, project, allProjects)
 	case "Network":
-		return DescribeNetwork(name)
+		return DescribeNetwork(name, project, allProjects)
 	case "Template":
-		return DescribeTemplate(name)
+		return DescribeTemplate(name, project, allProjects)
 	case "Volume":
-		return DescribeVolume(name)
+		return DescribeVolume(name, project, allProjects)
 	case "SSHKey":
-		return DescribeSSHKey(name)
+		return DescribeSSHKey(name, project, allProjects)
 	case "SecurityGroup":
-		return DescribeSecurityGroup(name)
+		return DescribeSecurityGroup(name, project, allProjects)
 	case "AffinityGroup":
-		return DescribeAffinityGroup(name)
+		return DescribeAffinityGroup(name, project, allProjects)
 	case "UserData":
-		return DescribeUserData(name)
+		return DescribeUserData(name, project, allProjects)
 	case "Snapshot":
 		return DescribeSnapshot(name)
+	case "Project":
+		return DescribeProject(name)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for standalone describe: %s", kind)
 	}

@@ -6,6 +6,8 @@ import (
 
 	v1 "cloudstackctl/apis/v1"
 	"cloudstackctl/pkg/cloudstack"
+
+	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 )
 
 // ApplyUserData applies userdata script to a VM by name (uses VM reset userdata API).
@@ -27,6 +29,9 @@ func ApplyUserData(ud *v1.UserData) (string, error) {
 	// CloudStack expects userdata to be base64-encoded; encode before sending.
 	encoded := base64.StdEncoding.EncodeToString([]byte(ud.Spec.Script))
 	regParams := client.User.NewRegisterUserDataParams(ud.Metadata.Name, encoded)
+	if err := setProjectOnParams(regParams, ud.Metadata.Project); err != nil {
+		return "", err
+	}
 	resp, err := client.User.RegisterUserData(regParams)
 	if err != nil {
 		return "", fmt.Errorf("failed to register userdata %s: %w", ud.Metadata.Name, err)
@@ -40,13 +45,17 @@ func ApplyUserData(ud *v1.UserData) (string, error) {
 }
 
 // ListUserData lists registered CloudStack UserData entries.
-func ListUserData(name string) (any, error) {
+func ListUserData(name, project string, allProjects bool) (any, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 
 	params := client.User.NewListUserDataParams()
+	if err := setProjectOnParams(params, project); err != nil {
+		return nil, err
+	}
+	setListAllOnParams(params, allProjects)
 	if name != "" {
 		params.SetName(name)
 	}
@@ -58,18 +67,12 @@ func ListUserData(name string) (any, error) {
 }
 
 // DescribeUserData returns the UserData object from CloudStack by name.
-func DescribeUserData(name string) (any, error) {
-	client, err := cloudstack.NewClient()
+func DescribeUserData(name, project string, allProjects bool) (any, error) {
+	respAny, err := ListUserData(name, project, allProjects)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CloudStack client: %w", err)
+		return nil, err
 	}
-
-	params := client.User.NewListUserDataParams()
-	params.SetName(name)
-	resp, err := client.User.ListUserData(params)
-	if err != nil {
-		return nil, fmt.Errorf("cloudstack API error: %w", err)
-	}
+	resp, _ := respAny.(*cs.ListUserDataResponse)
 	if resp == nil || len(resp.UserData) == 0 {
 		return nil, fmt.Errorf("userdata %s not found", name)
 	}
@@ -100,22 +103,24 @@ func ResolveUserData(name string) (string, error) {
 }
 
 // DeleteUserData deletes a UserData entry by name.
-func DeleteUserData(name string) (string, error) {
+func DeleteUserData(name, project string) (string, error) {
 	client, err := cloudstack.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
-	params := client.User.NewListUserDataParams()
-	params.SetName(name)
-	resp, err := client.User.ListUserData(params)
+	respAny, err := ListUserData(name, project, false)
 	if err != nil {
-		return "", fmt.Errorf("cloudstack API error: %w", err)
+		return "", err
 	}
+	resp, _ := respAny.(*cs.ListUserDataResponse)
 	if resp == nil || len(resp.UserData) == 0 {
 		return "", fmt.Errorf("userdata %s not found", name)
 	}
 	id := resp.UserData[0].Id
 	dp := client.User.NewDeleteUserDataParams(id)
+	if err := setProjectOnParams(dp, project); err != nil {
+		return "", err
+	}
 	if _, err := client.User.DeleteUserData(dp); err != nil {
 		return "", fmt.Errorf("failed to delete userdata %s: %w", name, err)
 	}

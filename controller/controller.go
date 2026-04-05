@@ -348,6 +348,14 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 				results = append(results, map[string]string{"kind": kind, "status": "success"})
 			}
 
+		case "Project":
+			id, err := handlers.ApplyCloudStackResource(raw)
+			if err != nil {
+				results = append(results, map[string]string{"kind": kind, "status": "error", "message": err.Error()})
+				continue
+			}
+			results = append(results, map[string]string{"kind": kind, "status": "success", "id": id})
+
 		default:
 			http.Error(w, "unsupported kind", http.StatusBadRequest)
 			return
@@ -466,6 +474,8 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 	kind := r.URL.Query().Get("kind")
 	name := r.URL.Query().Get("name")
 	appFilter := r.URL.Query().Get("application")
+	projectFilter := r.URL.Query().Get("project")
+	allProjects := r.URL.Query().Get("all-projects") == "true"
 	switch kind {
 	case "Application":
 		var apps []v1.Application
@@ -506,10 +516,16 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 		w.Write(b)
 		return
 	case "VirtualMachine":
-		if r.URL.Query().Get("all") == "true" {
-			payload := map[string]string{"kind": "VirtualMachine"}
+		if r.URL.Query().Get("all-vms") == "true" || projectFilter != "" || allProjects {
+			payload := map[string]interface{}{"kind": "VirtualMachine"}
 			if name != "" {
 				payload["name"] = name
+			}
+			if projectFilter != "" {
+				payload["project"] = projectFilter
+			}
+			if allProjects {
+				payload["allProjects"] = true
 			}
 			raw, _ := json.Marshal(payload)
 			obj, err := handlers.GetCloudStackResource(raw)
@@ -559,7 +575,30 @@ func (c *Controller) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData", "Template":
-		payload := map[string]string{"kind": kind}
+		payload := map[string]interface{}{"kind": kind}
+		if name != "" {
+			payload["name"] = name
+		}
+		if projectFilter != "" {
+			payload["project"] = projectFilter
+		}
+		if allProjects {
+			payload["allProjects"] = true
+		}
+		raw, _ := json.Marshal(payload)
+		obj, err := handlers.GetCloudStackResource(raw)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to list %s: %v", kind, err), http.StatusInternalServerError)
+			return
+		}
+		b, _ := json.Marshal(obj)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b)
+		return
+
+	case "Project":
+		payload := map[string]interface{}{"kind": kind}
 		if name != "" {
 			payload["name"] = name
 		}
@@ -591,9 +630,17 @@ func (c *Controller) handleDescribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing kind or name", http.StatusBadRequest)
 		return
 	}
+	projectFilter := r.URL.Query().Get("project")
+	allProjects := r.URL.Query().Get("all-projects") == "true"
 	switch kind {
 	case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData":
-		payload := map[string]string{"kind": kind, "name": name}
+		payload := map[string]interface{}{"kind": kind, "name": name}
+		if projectFilter != "" {
+			payload["project"] = projectFilter
+		}
+		if allProjects {
+			payload["allProjects"] = true
+		}
 		raw, _ := json.Marshal(payload)
 		if resp, err := handlers.DescribeCloudStackResource(raw); err != nil {
 			log.Fatalf("Local describe failed: %v", err)
@@ -638,10 +685,16 @@ func (c *Controller) handleDescribe(w http.ResponseWriter, r *http.Request) {
 		w.Write(b)
 		return
 	case "VirtualMachine":
-		if r.URL.Query().Get("all") == "true" {
-			payload := map[string]string{"kind": kind}
+		if r.URL.Query().Get("all-vms") == "true" {
+			payload := map[string]interface{}{"kind": kind}
 			if name != "" {
 				payload["name"] = name
+			}
+			if projectFilter != "" {
+				payload["project"] = projectFilter
+			}
+			if allProjects {
+				payload["allProjects"] = true
 			}
 			raw, _ := json.Marshal(payload)
 			obj, err := handlers.DescribeCloudStackResource(raw)
@@ -665,11 +718,25 @@ func (c *Controller) handleDescribe(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write(b)
 		return
+	case "Project":
+		payload := map[string]interface{}{"kind": kind, "name": name}
+		raw, _ := json.Marshal(payload)
+		obj, err := handlers.DescribeCloudStackResource(raw)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to describe %s: %v", kind, err), http.StatusInternalServerError)
+			return
+		}
+		b, _ := json.Marshal(obj)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b)
+		return
 	default:
 		http.Error(w, "unsupported kind", http.StatusBadRequest)
 		return
 	}
 }
+
 
 func (c *Controller) handleDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -795,7 +862,7 @@ func (c *Controller) handleDelete(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"Removing"}`))
 		return
-	case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData", "Template", "Snapshot":
+	case "Network", "Volume", "SSHKey", "SecurityGroup", "AffinityGroup", "UserData", "Template", "Snapshot", "Project":
 		// Delegate deletes of unmanaged CloudStack resources to handlers
 		if id, err := handlers.DeleteCloudStackResource(body); err != nil {
 			http.Error(w, fmt.Sprintf("failed to delete %s: %v", kind, err), http.StatusInternalServerError)

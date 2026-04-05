@@ -20,6 +20,7 @@ var deleteCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// file flag support (delete -f <yaml>)
 		filePath, _ := cmd.Flags().GetString("file")
+		projectFlag, _ := cmd.Flags().GetString("project")
 		var name string
 		var resourceType string
 		if filePath != "" {
@@ -54,16 +55,26 @@ var deleteCmd = &cobra.Command{
 				meta := docs[i]
 				kind, _ := meta["kind"].(string)
 				name = ""
+				project := ""
 				if m, ok := meta["metadata"].(map[string]interface{}); ok {
 					if n, ok := m["name"].(string); ok {
 						name = n
 					}
+					if p, ok := m["project"].(string); ok {
+						project = p
+					}
+				}
+				if project == "" && projectFlag != "" {
+					project = projectFlag
 				}
 				if kind == "" || name == "" {
 					log.Fatalf("each YAML doc must contain kind and metadata.name")
 				}
 				resourceType = kind
-				payload := map[string]string{"kind": resourceType, "name": name}
+				payload := map[string]interface{}{"kind": resourceType, "name": name}
+				if project != "" {
+					payload["project"] = project
+				}
 				rawPayload, _ := json.Marshal(payload)
 
 				if standalone {
@@ -108,7 +119,10 @@ var deleteCmd = &cobra.Command{
 		resourceType = normalizeResourceType(args[0])
 		name = args[1]
 
-		payload := map[string]string{"kind": resourceType, "name": name}
+		payload := map[string]interface{}{"kind": resourceType, "name": name}
+		if projectFlag != "" {
+			payload["project"] = projectFlag
+		}
 		rawPayload, _ := json.Marshal(payload)
 
 		if standalone {
@@ -147,4 +161,5 @@ var deleteCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(deleteCmd)
 	deleteCmd.Flags().StringP("file", "f", "", "Path to YAML configuration file to delete")
+	deleteCmd.Flags().StringP("project", "p", "", "Delete resource within a specific CloudStack project")
 }
