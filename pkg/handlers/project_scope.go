@@ -36,6 +36,11 @@ func setProjectOnParams(params projectScopedParams, project string) error {
 	return nil
 }
 
+// SetProjectOnParams resolves and sets the project ID on CloudStack params.
+func SetProjectOnParams(params projectScopedParams, project string) error {
+	return setProjectOnParams(params, project)
+}
+
 // setListAllOnParams sets projectid=-1 on the params, which instructs CloudStack
 // to return resources from all projects (and non-project resources) in one call.
 func setListAllOnParams(params projectScopedParams, allProjects bool) {
@@ -45,4 +50,9 @@ func setListAllOnParams(params projectScopedParams, allProjects bool) {
 			p.SetListall(true)
 		}
 	}
+}
+
+// SetListAllOnParams enables CloudStack all-projects listing on supported params.
+func SetListAllOnParams(params projectScopedParams, allProjects bool) {
+	setListAllOnParams(params, allProjects)
 }

@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-// normalizeResourceType maps shortnames to canonical resource type names
-func normalizeResourceType(s string) string {
+// NormalizeResourceType maps shortnames to canonical resource type names.
+func NormalizeResourceType(s string) string {
 	lower := strings.ToLower(strings.TrimSpace(s))
 	switch lower {
 	case "app", "apps", "application", "applications":
@@ -38,6 +38,11 @@ func normalizeResourceType(s string) string {
 	default:
 		return s
 	}
+}
+
+// normalizeResourceType preserves the original internal helper name.
+func normalizeResourceType(s string) string {
+	return NormalizeResourceType(s)
 }
 
 // ControllerRequest sends an HTTP request to the controller at the given path

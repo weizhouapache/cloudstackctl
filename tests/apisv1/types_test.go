@@ -1,26 +1,27 @@
-package v1
+package v1_test
 
 import (
 	"testing"
+
+	v1 "cloudstackctl/apis/v1"
 
 	"sigs.k8s.io/yaml"
 )
 
 func TestNetworkSpecYAMLUnmarshal(t *testing.T) {
-	data := []byte(`apiVersion: cloudstackctl/v1
-kind: Network
-metadata:
-  name: test-net
-spec:
-	zone: zone-1
-	networkOffering: offer-123
-  gateway: 10.0.0.1
-  netmask: 255.255.255.0
-  startIp: 10.0.0.10
-  endIp: 10.0.0.20
-`)
+	data := []byte("apiVersion: cloudstackctl/v1\n" +
+		"kind: Network\n" +
+		"metadata:\n" +
+		"  name: test-net\n" +
+		"spec:\n" +
+		"  zone: zone-1\n" +
+		"  networkOffering: offer-123\n" +
+		"  gateway: 10.0.0.1\n" +
+		"  netmask: 255.255.255.0\n" +
+		"  startIp: 10.0.0.10\n" +
+		"  endIp: 10.0.0.20\n")
 
-	var n Network
+	var n v1.Network
 	if err := yaml.Unmarshal(data, &n); err != nil {
 		t.Fatalf("failed to unmarshal YAML: %v", err)
 	}

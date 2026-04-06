@@ -205,22 +205,27 @@ func New(client *cloudstack.CloudStackClient) *Controller {
 	}
 }
 
+// Handler returns an HTTP handler exposing the controller endpoints.
+func (c *Controller) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", c.handleHealth)
+	mux.HandleFunc("/apply", c.handleApply)
+	mux.HandleFunc("/reconcile", c.handleReconcile)
+	mux.HandleFunc("/status", c.handleStatus)
+	mux.HandleFunc("/list", c.handleList)
+	mux.HandleFunc("/describe", c.handleDescribe)
+	mux.HandleFunc("/delete", c.handleDelete)
+	return mux
+}
+
 // Start launches the HTTP control plane and reconciliation loop
 func (c *Controller) Start() {
 	log.Println("Starting cloudstackctl controller")
 
 	// Start HTTP server for control endpoints
 	go func() {
-		http.HandleFunc("/health", c.handleHealth)
-		http.HandleFunc("/apply", c.handleApply)
-		http.HandleFunc("/reconcile", c.handleReconcile)
-		http.HandleFunc("/status", c.handleStatus)
-		http.HandleFunc("/list", c.handleList)
-		http.HandleFunc("/describe", c.handleDescribe)
-		http.HandleFunc("/delete", c.handleDelete)
-
 		log.Println("Controller HTTP server listening on :65426")
-		if err := http.ListenAndServe(":65426", nil); err != nil {
+		if err := http.ListenAndServe(":65426", c.Handler()); err != nil {
 			log.Printf("Controller HTTP server error: %v", err)
 		}
 	}()

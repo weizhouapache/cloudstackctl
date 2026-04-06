@@ -2,6 +2,31 @@
 
 For the full CLI reference, YAML examples, and complete environment variable list see [README.md](README.md).
 
+## Test Layout
+
+Tests are split by intent:
+
+- `tests/` contains black-box tests that only use exported package APIs.
+- Package-local `*_test.go` files remain under `cmd/`, `pkg/`, and `controller/` when they need access to unexported helpers or internal controller methods.
+
+Run the full suite locally with either:
+
+```bash
+go test ./...
+```
+
+or:
+
+```bash
+make test
+```
+
+CI-equivalent local run:
+
+```bash
+make ci
+```
+
 ## Prerequisites
 
 | Tool | Required for |
@@ -13,6 +38,14 @@ For the full CLI reference, YAML examples, and complete environment variable lis
 ---
 
 ## Step 1 — Build
+
+Quick build shortcuts:
+
+```bash
+make build
+make build-cli
+make build-controller
+```
 
 ### Binaries
 

@@ -1,28 +1,42 @@
 # This workflow will build a golang project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
 
-name: Go
+name: CI
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-
-  build:
+  ci:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: cloudstackctl
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d cloudstackctl"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      TEST_DATABASE_DSN: host=localhost user=postgres password=secret dbname=cloudstackctl port=5432 sslmode=disable
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: '1.26'
+        cache: true
 
-    - name: Build cloudstackctl
-      run: go build -o cloudstackctl main.go
-
-    - name: Build cloudstackctl-controller
-      run: go build -o cloudstackctl-controller cmd/controller/main.go
+    - name: Run CI target
+      run: make ci
