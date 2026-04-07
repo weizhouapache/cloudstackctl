@@ -1,0 +1,69 @@
+apiVersion: cloudstackctl/v1
+kind: VirtualMachineSpec
+metadata:
+  name: frontend-vmspec
+spec:
+  zone: ref-trl-10000-k-Mu24-wei-zhou
+  template: ubuntu24-cloud-image-root-password-with-tools
+  serviceOffering: Small Instance
+  networks:
+    - vlan-54
+  sshKeys:
+    - aaa1
+---
+apiVersion: cloudstackctl/v1
+kind: VirtualMachineSpec
+metadata:
+  name: backend-vmspec
+spec:
+  zone: ref-trl-10000-k-Mu24-wei-zhou
+  template: ubuntu24-cloud-image-root-password-with-tools
+  serviceOffering: Small Instance
+  networks:
+    - vlan-54
+  sshKeys:
+    - aaa2
+  volumes:
+    - name: data-disk1
+      diskOffering: small
+      type: data
+---
+apiVersion: cloudstackctl/v1
+kind: Component
+metadata:
+  name: frontend
+spec:
+  virtualMachineSpec: frontend-vmspec
+  replicas: 2
+  overrides:
+    template: ubuntu24-cloud-image-root-password-with-tools
+    serviceOffering: Small Instance
+  healthChecks:
+    - type: ping
+      interval: 10s
+      timeout: 5s
+---
+apiVersion: cloudstackctl/v1
+kind: Component
+metadata:
+  name: backend
+spec:
+  virtualMachineSpec: backend-vmspec
+  replicas: 2
+  overrides:
+    template: ubuntu24-cloud-image-root-password-with-tools
+    serviceOffering: Medium Instance
+  healthChecks:
+    - type: ping
+      interval: 10s
+      timeout: 5s
+---
+apiVersion: cloudstackctl/v1
+kind: Application
+metadata:
+  name: example-app
+spec:
+  components:
+    - name: frontend
+      dependsOn: backend
+    - name: backend
