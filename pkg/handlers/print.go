@@ -32,9 +32,9 @@ func PrintCloudStackResource(kind string, obj any) error {
 	case "VirtualMachine":
 		if resp, ok := obj.(*cs.ListVirtualMachinesResponse); ok {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "VIRTUAL MACHINE\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS")
+			fmt.Fprintln(w, "VIRTUAL MACHINE\tID\tIP ADDRESS\tPUBLIC IP\tSERVICE OFFERING\tSTATUS")
 			for _, v := range resp.VirtualMachines {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", v.Name, v.Id, v.Templatename, v.Serviceofferingname, v.State)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", v.Name, v.Id, v.Ipaddress, v.Publicip, v.Serviceofferingname, v.State)
 			}
 			w.Flush()
 			return nil
@@ -159,23 +159,43 @@ func PrintNetworks(nets []*cs.Network) {
 // PrintVMsFromController prints VMs returned by the controller query.
 func PrintVMsFromController(vms []v1.VirtualMachine) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "VIRTUAL MACHINE\tAPPLICATION\tCOMPONENT\tID\tTEMPLATE\tSERVICE OFFERING\tSTATUS\tREADY\tDRIFT")
+	fmt.Fprintln(w, "VIRTUAL MACHINE\tAPPLICATION\tCOMPONENT\tID\tIP ADDRESS\tPUBLIC IP\tSERVICE OFFERING\tSTATUS\tREADY\tDRIFT")
+	client, _ := cloudstack.NewClient()
 	for _, vm := range vms {
 		id := vm.CloudStackID
-		tmpl := vm.Spec.Template
-		if tmpl == "" && vm.ObservedSpec.Template != "" {
-			tmpl = vm.ObservedSpec.Template
+		ipAddress := ""
+		publicIP := ""
+		if client != nil {
+			params := client.VirtualMachine.NewListVirtualMachinesParams()
+			if id != "" {
+				params.SetId(id)
+			} else {
+				params.SetName(vm.Metadata.Name)
+			}
+			if resp, err := client.VirtualMachine.ListVirtualMachines(params); err == nil && resp != nil && len(resp.VirtualMachines) > 0 {
+				v := resp.VirtualMachines[0]
+				for _, nic := range v.Nic {
+					if nic.Ipaddress != "" {
+						ipAddress = nic.Ipaddress
+						break
+					}
+				}
+				if v.Publicip != "" {
+					publicIP = v.Publicip
+				}
+			}
 		}
 		so := vm.Spec.ServiceOffering
 		if so == "" && vm.ObservedSpec.ServiceOffering != "" {
 			so = vm.ObservedSpec.ServiceOffering
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%t\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%t\n",
 			vm.Metadata.Name,
 			vm.Application,
 			vm.Component,
 			id,
-			tmpl,
+			ipAddress,
+			publicIP,
 			so,
 			vm.Status.ObservedState,
 			vm.Status.Ready,
