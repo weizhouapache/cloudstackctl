@@ -2,6 +2,7 @@ package cli
 
 import (
 	"cloudstackctl/pkg/cloudstack"
+	"cloudstackctl/pkg/handlers"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -34,11 +35,25 @@ func init() {
 	rootCmd.PersistentFlags().String("cloudstack-secret-key", "", "CloudStack secret key (overrides CLOUDSTACK_SECRET_KEY)")
 	rootCmd.PersistentFlags().StringP("cloudstack-config", "c", "", "path to CloudStack config file")
 	rootCmd.PersistentFlags().BoolVarP(&standalone, "standalone", "s", false, "Run in standalone mode (no DB/controller; use CloudStack APIs directly)")
+	rootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
+	rootCmd.PersistentFlags().String("color", "auto", "Color output mode: auto, always, never")
 
 	// Configure cloudstack package from CLI flags before running commands
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if cfg, _ := cmd.Flags().GetString("cloudstack-config"); cfg != "" {
 			cloudstack.SetConfigFile(cfg)
+		}
+		noColor, _ := cmd.Flags().GetBool("no-color")
+		colorFlag, _ := cmd.Flags().GetString("color")
+		switch {
+		case noColor:
+			handlers.SetColorMode("never")
+		case colorFlag == "always":
+			handlers.SetColorMode("always")
+		case colorFlag == "never":
+			handlers.SetColorMode("never")
+		default:
+			handlers.SetColorMode("auto")
 		}
 	}
 }
