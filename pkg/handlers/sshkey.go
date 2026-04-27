@@ -92,6 +92,9 @@ func ApplySSHKey(key *v1.SSHKey) (string, error) {
 		return "", fmt.Errorf("cloudstack API error: %w", err)
 	}
 	if resp != nil && len(resp.SSHKeyPairs) > 0 {
+		if key.Metadata.Project != "" {
+			return "", fmt.Errorf("sshkey %s already exists in project %s (fingerprint=%s); updates are not supported", key.Metadata.Name, key.Metadata.Project, resp.SSHKeyPairs[0].Fingerprint)
+		}
 		return "", fmt.Errorf("sshkey %s already exists in CloudStack (fingerprint=%s); updates are not supported", key.Metadata.Name, resp.SSHKeyPairs[0].Fingerprint)
 	}
 

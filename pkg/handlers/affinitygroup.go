@@ -22,9 +22,21 @@ func ApplyAffinityGroup(ag *v1.AffinityGroup) (string, error) {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
 
-	// Try to find by name
-	existing, _, err := client.AffinityGroup.GetAffinityGroupByName(name)
-	if err == nil && existing != nil {
+	// Try to find by name in the provided project scope.
+	listParams := client.AffinityGroup.NewListAffinityGroupsParams()
+	listParams.SetName(name)
+	if err := setProjectOnParams(listParams, ag.Metadata.Project); err != nil {
+		return "", err
+	}
+	listResp, err := client.AffinityGroup.ListAffinityGroups(listParams)
+	if err != nil {
+		return "", fmt.Errorf("failed to list affinity groups: %w", err)
+	}
+	if listResp != nil && len(listResp.AffinityGroups) > 0 {
+		existing := listResp.AffinityGroups[0]
+		if ag.Metadata.Project != "" {
+			return "", fmt.Errorf("affinitygroup %s already exists in project %s (id=%s); updates are not supported", name, ag.Metadata.Project, existing.Id)
+		}
 		return "", fmt.Errorf("affinitygroup %s already exists in CloudStack (id=%s); updates are not supported", name, existing.Id)
 	}
 

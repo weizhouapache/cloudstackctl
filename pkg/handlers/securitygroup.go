@@ -80,8 +80,20 @@ func ApplySecurityGroup(sg *v1.SecurityGroup) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
-	existing, _, err := client.SecurityGroup.GetSecurityGroupByName(sg.Metadata.Name)
-	if existing != nil {
+	listParams := client.SecurityGroup.NewListSecurityGroupsParams()
+	listParams.SetSecuritygroupname(sg.Metadata.Name)
+	if err := setProjectOnParams(listParams, sg.Metadata.Project); err != nil {
+		return "", err
+	}
+	listResp, err := client.SecurityGroup.ListSecurityGroups(listParams)
+	if err != nil {
+		return "", fmt.Errorf("failed to list security groups: %w", err)
+	}
+	if listResp != nil && len(listResp.SecurityGroups) > 0 {
+		existing := listResp.SecurityGroups[0]
+		if sg.Metadata.Project != "" {
+			return "", fmt.Errorf("securitygroup %s already exists in project %s (id=%s); updates are not supported", sg.Metadata.Name, sg.Metadata.Project, existing.Id)
+		}
 		return "", fmt.Errorf("securitygroup %s already exists in CloudStack (id=%s); updates are not supported", sg.Metadata.Name, existing.Id)
 	}
 	// Create security group with optional description from metadata.annotations["description"]

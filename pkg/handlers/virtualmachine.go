@@ -11,6 +11,48 @@ import (
 	cs "github.com/apache/cloudstack-go/v2/cloudstack"
 )
 
+func vmAttachedToAnyNetwork(vm *cs.VirtualMachine, networkIDs []string) bool {
+	if vm == nil || len(networkIDs) == 0 {
+		return false
+	}
+	requested := make(map[string]struct{}, len(networkIDs))
+	for _, id := range networkIDs {
+		if id != "" {
+			requested[id] = struct{}{}
+		}
+	}
+	for _, nic := range vm.Nic {
+		if _, ok := requested[nic.Networkid]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func findExistingVMInScope(client *cs.CloudStackClient, name, project string, networkIDs []string) (*cs.VirtualMachine, error) {
+	params := client.VirtualMachine.NewListVirtualMachinesParams()
+	params.SetName(name)
+	if err := setProjectOnParams(params, project); err != nil {
+		return nil, err
+	}
+	resp, err := client.VirtualMachine.ListVirtualMachines(params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list virtual machines: %w", err)
+	}
+	if resp == nil || len(resp.VirtualMachines) == 0 {
+		return nil, nil
+	}
+	if len(networkIDs) == 0 {
+		return resp.VirtualMachines[0], nil
+	}
+	for _, existing := range resp.VirtualMachines {
+		if vmAttachedToAnyNetwork(existing, networkIDs) {
+			return existing, nil
+		}
+	}
+	return nil, nil
+}
+
 // ListVMs queries CloudStack and returns the SDK response for callers to format.
 func ListVMs(name, project string, allProjects bool) (any, error) {
 	client, err := cloudstack.NewClient()
@@ -103,12 +145,9 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) (string, er
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
-	// Check for existing VM with the same name - we don't support updates
-	listParams := client.VirtualMachine.NewListVirtualMachinesParams()
-	listParams.SetName(vm.Metadata.Name)
-	listResp, lerr := client.VirtualMachine.ListVirtualMachines(listParams)
-	if lerr == nil && listResp != nil && len(listResp.VirtualMachines) > 0 {
-		return "", fmt.Errorf("virtualmachine %s already exists in CloudStack (id=%s); updates are not supported", vm.Metadata.Name, listResp.VirtualMachines[0].Id)
+	project := vm.Spec.Project
+	if project == "" {
+		project = vm.Metadata.Project
 	}
 
 	// Resolve potential name references to IDs for template, service offering, and networks
@@ -132,6 +171,19 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) (string, er
 		resolvedNets = append(resolvedNets, nid)
 	}
 
+	// For create via apply, only treat the VM as existing when it is found in the
+	// same project scope and, when requested, attached to one of the requested networks.
+	existingVM, lerr := findExistingVMInScope(client, vm.Metadata.Name, project, resolvedNets)
+	if lerr != nil {
+		return "", lerr
+	}
+	if existingVM != nil {
+		if project != "" {
+			return "", fmt.Errorf("virtualmachine %s already exists in project %s (id=%s); updates are not supported", vm.Metadata.Name, project, existingVM.Id)
+		}
+		return "", fmt.Errorf("virtualmachine %s already exists in CloudStack (id=%s); updates are not supported", vm.Metadata.Name, existingVM.Id)
+	}
+
 	params := client.VirtualMachine.NewDeployVirtualMachineParams(serviceOfferingID, templateID, "")
 	params.SetName(vm.Metadata.Name)
 	// If a zone is provided in the spec, try to resolve the zone name to an ID.
@@ -143,13 +195,8 @@ func ApplyVirtualMachineManaged(vm *v1.VirtualMachine, managed bool) (string, er
 		}
 		params.SetZoneid(zid)
 	}
-	if vm.Spec.Project != "" {
-		// Accept either a project UUID or a project name; try resolving name first.
-		if pid, perr := ResolveProject(vm.Spec.Project); perr == nil {
-			params.SetProjectid(pid)
-		} else {
-			params.SetProjectid(vm.Spec.Project)
-		}
+	if err := setProjectOnParams(params, project); err != nil {
+		return "", err
 	}
 	if len(vm.Spec.Networks) > 0 {
 		params.SetNetworkids(resolvedNets)

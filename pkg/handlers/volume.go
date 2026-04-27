@@ -83,7 +83,13 @@ func ApplyVolume(vol *v1.Volume) (string, error) {
 		return "", err
 	}
 	resp, err := client.Volume.ListVolumes(params)
-	if err == nil && resp != nil && len(resp.Volumes) > 0 {
+	if err != nil {
+		return "", fmt.Errorf("failed to list volumes: %w", err)
+	}
+	if resp != nil && len(resp.Volumes) > 0 {
+		if vol.Metadata.Project != "" {
+			return "", fmt.Errorf("volume %s already exists in project %s (id=%s); updates are not supported", vol.Metadata.Name, vol.Metadata.Project, resp.Volumes[0].Id)
+		}
 		return "", fmt.Errorf("volume %s already exists in CloudStack (id=%s); updates are not supported", vol.Metadata.Name, resp.Volumes[0].Id)
 	}
 

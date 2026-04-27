@@ -279,6 +279,15 @@ func (c *Controller) handleApply(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid resource document", http.StatusBadRequest)
 			return
 		}
+		if p, ok := meta["project"].(string); ok && p != "" {
+			if m, ok := meta["metadata"].(map[string]interface{}); ok {
+				if _, hasProject := m["project"]; !hasProject {
+					m["project"] = p
+					meta["metadata"] = m
+					raw, _ = json.Marshal(meta)
+				}
+			}
+		}
 		kind, _ := meta["kind"].(string)
 
 		switch kind {
@@ -794,7 +803,6 @@ func (c *Controller) handleDescribe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 func (c *Controller) handleDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1173,6 +1181,16 @@ func (c *Controller) applyComponent(comp *v1.Component) error {
 
 // applyVMSpec creates/updates a reusable VirtualMachineSpec resource
 func (c *Controller) applyVMSpec(vs *v1.VirtualMachineSpecResource) error {
+	// Accept project in either metadata.project or spec.project and keep them in sync.
+	vmsProject := strings.TrimSpace(vs.Metadata.Project)
+	if vmsProject == "" {
+		vmsProject = strings.TrimSpace(vs.Spec.Project)
+	}
+	if vmsProject != "" {
+		vs.Metadata.Project = vmsProject
+		vs.Spec.Project = vmsProject
+	}
+
 	// Only allow create (apply) or idempotent re-apply with identical spec.
 	var existing v1.VirtualMachineSpecResource
 	if err := db.DB.Where("name = ?", vs.Metadata.Name).First(&existing).Error; err == nil {
@@ -1192,6 +1210,16 @@ func (c *Controller) applyVMSpec(vs *v1.VirtualMachineSpecResource) error {
 
 // applyVM creates/updates a VirtualMachine resource
 func (c *Controller) applyVM(vm *v1.VirtualMachine) error {
+	// Accept project in either metadata.project or spec.project and keep them in sync.
+	vmProject := strings.TrimSpace(vm.Metadata.Project)
+	if vmProject == "" {
+		vmProject = strings.TrimSpace(vm.Spec.Project)
+	}
+	if vmProject != "" {
+		vm.Metadata.Project = vmProject
+		vm.Spec.Project = vmProject
+	}
+
 	// Attempt to find the VM in CloudStack by CloudStackID or by name
 	// If CloudStackID is empty, try to discover VM in CloudStack
 	if vm.CloudStackID == "" {

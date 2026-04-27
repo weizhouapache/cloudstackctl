@@ -23,6 +23,22 @@ func ApplyUserData(ud *v1.UserData) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create CloudStack client: %w", err)
 	}
+	listParams := client.User.NewListUserDataParams()
+	listParams.SetName(ud.Metadata.Name)
+	if err := setProjectOnParams(listParams, ud.Metadata.Project); err != nil {
+		return "", err
+	}
+	listResp, err := client.User.ListUserData(listParams)
+	if err != nil {
+		return "", fmt.Errorf("failed to list userdata: %w", err)
+	}
+	if listResp != nil && len(listResp.UserData) > 0 {
+		existing := listResp.UserData[0]
+		if ud.Metadata.Project != "" {
+			return "", fmt.Errorf("userdata %s already exists in project %s (id=%s); updates are not supported", ud.Metadata.Name, ud.Metadata.Project, existing.Id)
+		}
+		return "", fmt.Errorf("userdata %s already exists in CloudStack (id=%s); updates are not supported", ud.Metadata.Name, existing.Id)
+	}
 	// Register UserData in CloudStack as a standalone UserData entry.
 	// Use the SDK register/create method; CloudStack expects the content
 	// to be provided as a string.

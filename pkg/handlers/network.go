@@ -195,5 +195,8 @@ func ApplyNetwork(netRes *v1.Network) (string, error) {
 	}
 	// Resource exists — updates are not supported at this time
 	existing := listResp.Networks[0]
+	if netRes.Metadata.Project != "" {
+		return "", fmt.Errorf("network %s already exists in project %s (id=%s); updates are not supported", name, netRes.Metadata.Project, existing.Id)
+	}
 	return "", fmt.Errorf("network %s already exists in CloudStack (id=%s); updates are not supported", name, existing.Id)
 }
