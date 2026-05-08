@@ -4,10 +4,10 @@
 # Tier 1 — MySQL database server (cs-db)
 # Tier 2 — Primary CloudStack management server (cs-mgmt-primary)
 #           Initialises the database; starts when tier 1 is healthy.
-#           Health check: HTTP GET :8080/client/
+#           Health check: HTTP GET :8080/client/api
 # Tier 3 — Two additional management servers (cs-mgmt-secondary)
 #           Join the existing database; start when tier 2 is healthy.
-#           Health check: HTTP GET :8080/client/
+#           Health check: HTTP GET :8080/client/api
 #
 # NOTE: DB_HOST discovery in tiers 2/3 assumes the MySQL VM hostname
 #       resolves as "cs-db-1" (set by cloud-init).  If your network
@@ -258,7 +258,7 @@ spec:
       healthChecks:
         - type: http
           port: 8080
-          path: /client/
+          path: /client/api
           interval: 30s
           timeout: 15s
 
@@ -274,6 +274,6 @@ spec:
       healthChecks:
         - type: http
           port: 8080
-          path: /client/
+          path: /client/api
           interval: 30s
           timeout: 15s
