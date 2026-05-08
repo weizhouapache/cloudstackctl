@@ -57,6 +57,22 @@ There are two supported mode:
 | Component | ❌ | ✅ |
 | VirtualMachineSpec | ❌ | ✅ |
 
+### Apply Behavior by Kind
+
+| Kind | Project Supported | Same Name on Apply |
+|---|---|---|
+| VirtualMachine | Yes (`metadata.project` / `spec.project`; top-level `project` accepted) | Rejected as already exists when found in same project; if `spec.networks` is set, existence must also match one of those networks |
+| Network | Yes (`metadata.project`; top-level `project` accepted) | Rejected as already exists in same project |
+| Volume | Yes (`metadata.project`; top-level `project` accepted) | Rejected as already exists in same project |
+| SSHKey | Yes (`metadata.project`; top-level `project` accepted) | Rejected as already exists in same project |
+| SecurityGroup | Yes (`metadata.project`; top-level `project` accepted) | Rejected as already exists in same project |
+| AffinityGroup | Yes (`metadata.project`; top-level `project` accepted) | Rejected as already exists in same project |
+| UserData | Yes (`metadata.project`; top-level `project` accepted) | Rejected as already exists in same project |
+| Project | N/A (global resource) | Rejected as already exists by project name |
+| Application (controller mode) | Yes (`metadata.project` / `spec.project`) | Upsert in DB by name (existing record is updated) |
+| Component (controller mode) | Partial (stored in `metadata.project`; inherited from `Application` when managed by app) | Upsert in DB by name; ownership conflicts are rejected |
+| VirtualMachineSpec (controller mode) | Yes (`metadata.project` / `spec.project`) | Create-only by name; identical re-apply is allowed, spec changes are rejected |
+
 
 
 # Supported Resource Types and Actions
